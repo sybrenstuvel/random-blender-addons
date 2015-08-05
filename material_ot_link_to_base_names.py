@@ -7,7 +7,6 @@ bl_info = {
     'category': 'Material',
 }
 
-
 import bpy
 
 
@@ -20,45 +19,39 @@ class MATERIAL_OT_link_to_base_names(bpy.types.Operator):
         for ob in context.scene.objects:
             for slot in ob.material_slots:
                 self.fixup_slot(slot)
-            for idx, mat in enumerate(ob.data.materials):
-                self.fixup_mat(idx, mat)
-                
+
         return {'FINISHED'}
-    
+
     def split_name(self, material):
         name = material.name
 
         if not '.' in name:
             return name, None
-        
+
         base, suffix = name.rsplit('.', 1)
         try:
             num = int(suffix, 10)
         except ValueError:
             # Not a numeric suffix
             return name, None
-        
+
         return base, suffix
-    
+
     def fixup_slot(self, slot):
         if not slot.material:
             return
-    
+
         base, suffix = self.split_name(slot.material)
         if suffix is None:
             return
-        
+
         try:
             base_mat = bpy.data.materials[base]
-            print('Base material %r not found' % base)
         except KeyError:
+            print('Base material %r not found' % base)
             return
-        
-        slot.material = base_mat             
-        
-    
-    def fixup_mat(self, idx, mat):
-        pass
+
+        slot.material = base_mat
 
 
 def register():
