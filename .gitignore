@@ -1,0 +1,7 @@
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*~
+__pycache__/
+*.py[cod]
+.idea/
+.pydev/
