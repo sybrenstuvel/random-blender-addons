@@ -3,19 +3,16 @@ Remote debugging support.
 
 This addon allows you to use a remote Python debugger with PyCharm, PyDev and
 possibly other IDEs. As it is, without modification, it only supports PyCharm,
-but that's easily fixed by changing the global EGG_PATH constant. I assume you
-know how to do that, as you're a developer. If not, what are you using a
-debugger for in the first place?
+but it may work by pointing it at a similar egg file shipped with PyDev.
 
-NOTE: Batteries not included. Copy pycharm-debug-py3k.egg from your PyCharm
-installation to whatever EGG_PATH points at, or point EGG_PATH to the absolute
-path of that file.
+Before using, point the addon to your pycharm-debug-py3k.egg file in the
+addon preferences screen.
 """
 
 bl_info = {
     'name': 'Remote debugger',
     'author': 'Sybren A. Stüvel',
-    'version': (0, 1),
+    'version': (0, 2),
     'blender': (2, 75, 0),
     'location': 'Press [Space], search for "debugger"',
     'category': 'Development',
@@ -23,8 +20,26 @@ bl_info = {
 
 import bpy
 import os.path
+from bpy.types import AddonPreferences
+from bpy.props import StringProperty
 
-EGG_PATH = '/path/to/pycharm-debug-py3k.egg'
+
+class DebuggerAddonPreferences(AddonPreferences):
+    # this must match the addon name, use '__package__'
+    # when defining this in a submodule of a python package.
+    bl_idname = __name__
+
+    eggpath = StringProperty(
+        name='Path of the PyCharm egg file',
+        description='Make sure you select the py3k egg',
+        subtype='FILE_PATH',
+        default='pycharm-debug-py3k.egg'
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, 'eggpath')
+        layout.label(text='Make sure you select the egg for Python 3.x: pycharm-debug-py3k.egg ')
 
 
 class DEBUG_OT_connect_debugger(bpy.types.Operator):
@@ -35,14 +50,18 @@ class DEBUG_OT_connect_debugger(bpy.types.Operator):
     def execute(self, context):
         import sys
 
-        egg_fname = os.path.abspath(bpy.path.abspath(EGG_PATH))
+        user_preferences = context.user_preferences
+        addon_prefs = user_preferences.addons[__name__].preferences
 
-        if not os.path.exists(egg_fname):
-            self.report({'ERROR'}, 'Unable to find debug egg at %r' % egg_fname)
+        eggpath = os.path.abspath(addon_prefs.eggpath)
+
+        if not os.path.exists(eggpath):
+            self.report({'ERROR'}, 'Unable to find debug egg at %r. Configure the addon properties '
+                                   'in the User Preferences menu.' % eggpath)
             return {'CANCELLED'}
 
         if not any('pycharm-debug' in p for p in sys.path):
-            sys.path.append(egg_fname)
+            sys.path.append(eggpath)
 
         import pydevd
         pydevd.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True)
@@ -52,10 +71,12 @@ class DEBUG_OT_connect_debugger(bpy.types.Operator):
 
 def register():
     bpy.utils.register_class(DEBUG_OT_connect_debugger)
+    bpy.utils.register_class(DebuggerAddonPreferences)
 
 
 def unregister():
     bpy.utils.unregister_class(DEBUG_OT_connect_debugger)
+    bpy.utils.unregister_class(DebuggerAddonPreferences)
 
 
 if __name__ == '__main__':
