@@ -7,6 +7,9 @@ but it may work by pointing it at a similar egg file shipped with PyDev.
 
 Before using, point the addon to your pycharm-debug-py3k.egg file in the
 addon preferences screen.
+
+For more information on how to use this addon, please read my article at
+http://code.blender.org/2015/10/debugging-python-code-with-pycharm/
 """
 
 bl_info = {
