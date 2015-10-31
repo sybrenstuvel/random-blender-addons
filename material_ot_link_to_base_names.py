@@ -22,10 +22,8 @@ class MATERIAL_OT_link_to_base_names(bpy.types.Operator):
 
         return {'FINISHED'}
 
-    def split_name(self, material):
-        name = material.name
-
-        if not '.' in name:
+    def split_name(self, name):
+        if '.' not in name:
             return name, None
 
         base, suffix = name.rsplit('.', 1)
@@ -41,7 +39,7 @@ class MATERIAL_OT_link_to_base_names(bpy.types.Operator):
         if not slot.material:
             return
 
-        base, suffix = self.split_name(slot.material)
+        base, suffix = self.split_name(slot.material.name)
         if suffix is None:
             return
 
