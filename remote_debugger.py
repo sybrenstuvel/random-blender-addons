@@ -67,7 +67,8 @@ class DEBUG_OT_connect_debugger(bpy.types.Operator):
             sys.path.append(eggpath)
 
         import pydevd
-        pydevd.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True)
+        pydevd.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True,
+                        suspend=False)
 
         return {'FINISHED'}
 
