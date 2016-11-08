@@ -107,6 +107,12 @@ def render_constraint_stuff(self, context):
     row.operator(CONSTRAINT_OT_disable_without_moving.bl_idname)
 
 
+def render_transform_panel(self, context):
+    row = self.layout.row(align=True)
+    row.operator(OBJECT_OT_copy_matrix.bl_idname, icon='COPYDOWN')
+    row.operator(OBJECT_OT_paste_matrix.bl_idname, icon='PASTEDOWN')
+
+
 def register():
     bpy.types.WindowManager.disable_constraint = bpy.props.StringProperty()
 
@@ -114,6 +120,7 @@ def register():
     bpy.utils.register_class(OBJECT_OT_paste_matrix)
     bpy.utils.register_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.append(render_constraint_stuff)
+    bpy.types.VIEW3D_PT_tools_transform.append(render_transform_panel)
 
 
 def unregister():
@@ -123,3 +130,4 @@ def unregister():
     bpy.utils.unregister_class(OBJECT_OT_paste_matrix)
     bpy.utils.unregister_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.remove(render_constraint_stuff)
+    bpy.types.VIEW3D_PT_tools_transform.remove(render_transform_panel)
