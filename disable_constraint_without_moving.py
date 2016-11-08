@@ -108,9 +108,11 @@ def render_constraint_stuff(self, context):
 
 
 def render_transform_panel(self, context):
-    row = self.layout.row(align=True)
-    row.operator(OBJECT_OT_copy_matrix.bl_idname, icon='COPYDOWN')
-    row.operator(OBJECT_OT_paste_matrix.bl_idname, icon='PASTEDOWN')
+    box = self.layout.column(align=True)
+    box.label('Visual Transform')
+    row = box.row(align=True)
+    row.operator(OBJECT_OT_copy_matrix.bl_idname, icon='COPYDOWN', text='Copy')
+    row.operator(OBJECT_OT_paste_matrix.bl_idname, icon='PASTEDOWN', text='Paste')
 
 
 def register():
@@ -121,6 +123,7 @@ def register():
     bpy.utils.register_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.append(render_constraint_stuff)
     bpy.types.VIEW3D_PT_tools_transform.append(render_transform_panel)
+    bpy.types.VIEW3D_PT_tools_posemode.append(render_transform_panel)
 
 
 def unregister():
@@ -131,3 +134,4 @@ def unregister():
     bpy.utils.unregister_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.remove(render_constraint_stuff)
     bpy.types.VIEW3D_PT_tools_transform.remove(render_transform_panel)
+    bpy.types.VIEW3D_PT_tools_posemode.remove(render_transform_panel)
