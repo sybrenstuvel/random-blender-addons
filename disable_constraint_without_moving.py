@@ -102,7 +102,8 @@ def render_constraint_stuff(self, context):
     row.prop_search(
         context.window_manager, 'disable_constraint',
         context.object, 'constraints',
-        text='')
+        text='',
+        icon='CONSTRAINT')
     row.operator(CONSTRAINT_OT_disable_without_moving.bl_idname)
 
 
