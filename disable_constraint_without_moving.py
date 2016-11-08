@@ -11,6 +11,8 @@ bl_info = {
     'blender': (2, 78, 0),
     'location': 'Constraints panel',
     'category': 'Animation',
+    'support': 'COMMUNITY',
+    'warning': 'This is a quickly hacked-together add-on. Let me know if it works for you.',
 }
 
 import bpy
