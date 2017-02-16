@@ -4,7 +4,7 @@ bl_info = {
     'version': (1, 1),
     'blender': (2, 78, 0),
     'location': 'View3D > Pose > Show/Hide > Show Single Selection Set, or Shift+Alt+W',
-    'description': 'In pose mode, when pressing Ctrl+Alt+W, a menu is shown to select a '
+    'description': 'In pose mode, when pressing Shift+Alt+W, a menu is shown to select a '
                    'Selection Set. All bones in this Selection Set are shown, the rest is '
                    'hidden. Hidden bones are also deselected.',
     'category': 'Animation',
