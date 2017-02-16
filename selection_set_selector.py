@@ -1,9 +1,9 @@
 bl_info = {
     'name': 'Selection Set Selector',
     'author': 'Dr. Sybren',
-    'version': (1, 0),
+    'version': (1, 1),
     'blender': (2, 78, 0),
-    'location': 'View3D > Pose > Show/Hide > Show Single Selection Set, or Ctrl+Alt+W',
+    'location': 'View3D > Pose > Show/Hide > Show Single Selection Set, or Shift+Alt+W',
     'description': 'In pose mode, when pressing Ctrl+Alt+W, a menu is shown to select a '
                    'Selection Set. All bones in this Selection Set are shown, the rest is '
                    'hidden. Hidden bones are also deselected.',
@@ -63,7 +63,7 @@ class POSE_MT_selection_sets(Menu):
             props.selection_set_name = ss.name
 
 
-def add_ssss_button(self, context):
+def add_sss_button(self, context):
     self.layout.menu('POSE_MT_selection_sets')
 
 
@@ -78,14 +78,14 @@ def register():
     kmi = km.keymap_items.new('wm.call_menu', 'W', 'PRESS', alt=True, shift=True)
     kmi.properties.name = 'POSE_MT_selection_sets'
 
-    bpy.types.VIEW3D_MT_pose_showhide.append(add_ssss_button)
+    bpy.types.VIEW3D_MT_pose_showhide.append(add_sss_button)
 
 
 def unregister():
     bpy.utils.unregister_class(POSE_OT_select_selection_set)
     bpy.utils.unregister_class(POSE_OT_select_selection_set_call_menu)
     bpy.utils.unregister_class(POSE_MT_selection_sets)
-    bpy.types.VIEW3D_MT_pose_showhide.remove(add_ssss_button)
+    bpy.types.VIEW3D_MT_pose_showhide.remove(add_sss_button)
 
 
 if __name__ == "__main__":
