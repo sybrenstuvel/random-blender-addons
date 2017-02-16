@@ -38,6 +38,8 @@ class POSE_OT_select_selection_set(Operator):
         for bone in context.visible_pose_bones:
             if bone.name in sel_set.bone_ids:
                  bone.bone.select = True
+        for a in context.screen.areas:
+            a.tag_redraw()
 
         return {'FINISHED'}
 
