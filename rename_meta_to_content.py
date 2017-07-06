@@ -81,19 +81,47 @@ class SEQUENCER_OT_mute_audio(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class SEQUENCER_OT_unmeta(bpy.types.Operator):
+    bl_idname = 'sequencer.unmeta'
+    bl_label = 'Crop contents'
+    bl_description = 'Crops contents to start/end of meta strip'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        if not context.scene.sequence_editor:
+            return False
+        return any(s.type == 'META' for s in context.selected_sequences)
+
+    def execute(self, context):
+        for strip in context.selected_sequences:
+            if strip.type != 'META':
+                continue
+
+            for sub in strip.sequences:
+                sub.frame_start = strip.frame_start
+                sub.frame_offset_start = strip.frame_offset_start
+                sub.frame_offset_end = strip.frame_offset_end
+
+        return {'FINISHED'}
+
+
 def render_header(self, context):
         layout = self.layout
         layout.operator(SEQUENCER_OT_setup_meta.bl_idname)
         layout.operator(SEQUENCER_OT_mute_audio.bl_idname)
+        layout.operator(SEQUENCER_OT_unmeta.bl_idname)
 
 
 def register():
     bpy.utils.register_class(SEQUENCER_OT_setup_meta)
     bpy.utils.register_class(SEQUENCER_OT_mute_audio)
+    bpy.utils.register_class(SEQUENCER_OT_unmeta)
     bpy.types.SEQUENCER_HT_header.append(render_header)
 
 
 def unregister():
     bpy.utils.unregister_class(SEQUENCER_OT_setup_meta)
     bpy.utils.unregister_class(SEQUENCER_OT_mute_audio)
+    bpy.utils.unregister_class(SEQUENCER_OT_unmeta)
     bpy.types.SEQUENCER_HT_header.remove(render_header)
