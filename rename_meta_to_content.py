@@ -106,6 +106,27 @@ class SEQUENCER_OT_unmeta(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class SEQUENCER_OT_select_here(bpy.types.Operator):
+    bl_idname = 'sequencer.select_here'
+    bl_label = 'Select strips at current frame'
+    bl_description = 'Selects only those strips that overlap with the current frame'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.sequence_editor and context.scene.sequence_editor.sequences
+
+    def execute(self, context):
+        fra = context.scene.frame_current
+
+        for strip in context.scene.sequence_editor.sequences:
+            strip.select = strip.frame_final_start <= fra < strip.frame_final_end
+            strip.select_left_handle = strip.select
+            strip.select_right_handle = False
+
+        return {'FINISHED'}
+
+
 def render_header(self, context):
         layout = self.layout
         layout.operator(SEQUENCER_OT_setup_meta.bl_idname)
@@ -113,15 +134,23 @@ def render_header(self, context):
         layout.operator(SEQUENCER_OT_unmeta.bl_idname)
 
 
+def render_select_menu(self, context):
+    layout = self.layout
+    layout.operator(SEQUENCER_OT_select_here.bl_idname)
+
+
 def register():
     bpy.utils.register_class(SEQUENCER_OT_setup_meta)
     bpy.utils.register_class(SEQUENCER_OT_mute_audio)
     bpy.utils.register_class(SEQUENCER_OT_unmeta)
+    bpy.utils.register_class(SEQUENCER_OT_select_here)
     bpy.types.SEQUENCER_HT_header.append(render_header)
+    bpy.types.SEQUENCER_MT_select.append(render_select_menu)
 
 
 def unregister():
     bpy.utils.unregister_class(SEQUENCER_OT_setup_meta)
     bpy.utils.unregister_class(SEQUENCER_OT_mute_audio)
     bpy.utils.unregister_class(SEQUENCER_OT_unmeta)
+    bpy.utils.unregister_class(SEQUENCER_OT_select_here)
     bpy.types.SEQUENCER_HT_header.remove(render_header)
