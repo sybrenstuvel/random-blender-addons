@@ -74,13 +74,24 @@ def highlights(strip: Sequence) -> typing.Union[idprop.types.IDPropertyArray, li
 def add_highlight(strip: Sequence, abs_frame: int):
     """Compute the frame relative to the start of the strip and store it."""
 
-    # TODO: compute propre frame nr
-    rel_frame = abs_frame
+    rel_frame = abs_to_rel(strip, abs_frame)
 
     hl = set(highlights(strip))
     hl.add(rel_frame)
     strip["kwiq_highlights"] = sorted(hl)
     tag_redraw_all_sequencer_editors()
+
+
+def abs_to_rel(strip: Sequence, abs_frame: int) -> int:
+    """Convert absolute frame to strip-source-relative frame number."""
+
+    return abs_frame - strip.frame_start
+
+
+def rel_to_abs(strip: Sequence, rel_frame: int) -> int:
+    """Convert strip-source-relative frame number to absolute frame."""
+
+    return rel_frame + strip.frame_start
 
 
 class KWIQ_PT_tools(Panel):
@@ -186,8 +197,7 @@ def draw_callback_px():
 
         # Draw
         for rel_frame in hl:
-            # TODO: properly compute absolute frame.
-            abs_frame = rel_frame
+            abs_frame = rel_to_abs(strip, rel_frame)
             bgl.glVertex2f(abs_frame, strip_coords[1])
             bgl.glVertex2f(abs_frame, strip_coords[3])
     bgl.glEnd()
