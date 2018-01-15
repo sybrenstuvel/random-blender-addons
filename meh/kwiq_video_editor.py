@@ -63,8 +63,7 @@ def shown_strips(context) -> bpy.types.Sequences:
 
 
 def highlights(strip: Sequence) -> typing.Union[idprop.types.IDPropertyArray, list]:
-    """Safely get the highlights."""
-
+    """Get the highlights for the given sequencer strip."""
     try:
         return strip["kwiq_highlights"]
     except KeyError:
