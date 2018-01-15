@@ -101,6 +101,10 @@ class KWIQ_PT_tools(Panel):
     bl_region_type = 'UI'
     bl_category = 'Kwiq'
 
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}
+
     def draw(self, context):
         strip = active_strip(context)
         layout = self.layout
