@@ -81,13 +81,13 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
 
 
 def render_panel(self, context):
-        layout = self.layout
+    layout = self.layout
 
-        col = layout.column(align=True)
-        col.label(text="Real Copy Pose:")
-        row = col.row(align=True)
-        row.operator("pose.copy_as_json", text="Copy as JSON")
-        row.operator("pose.paste_from_json", text="Paste from JSON")
+    col = layout.column(align=True)
+    col.label(text="Real Copy Pose:")
+    row = col.row(align=True)
+    row.operator("pose.copy_as_json", text="Copy as JSON")
+    row.operator("pose.paste_from_json", text="Paste from JSON")
 
 
 def register():
