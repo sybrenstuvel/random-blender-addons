@@ -8,14 +8,14 @@ bl_info = {
     'website': 'https://github.com/sybrenstuvel/random-blender-addons',
 }
 
+import pathlib
+
 import bpy
+import aud
 
 
 @bpy.app.handlers.persistent
-def play_sound(*args):
-    import pathlib
-    import aud
-
+def play_sound(scene):
     ping_path = pathlib.Path(__file__).with_name('ping.ogg')
 
     aud_dev = aud.Device()
