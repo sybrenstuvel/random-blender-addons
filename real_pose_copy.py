@@ -11,8 +11,8 @@ bl_info = {
     'name': 'Real pose copy',
     'author': 'Sybren A. Stüvel',
     'version': (1, 0),
-    'blender': (2, 77, 0),
-    'location': 'Tools Panel > Pose Tools',
+    'blender': (2, 80, 0),
+    'location': '3D View Numerical Panel > Pose Tools',
     'category': 'Animation',
 }
 
@@ -28,7 +28,6 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
     bl_idname = 'pose.copy_as_json'
     bl_label = 'Copy pose as JSON'
     bl_description = 'Copies the matrices of the selected bones as JSON onto the clipboard'
-    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -51,7 +50,6 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
     bl_idname = 'pose.paste_from_json'
     bl_label = 'Paste pose from JSON'
     bl_description = 'Copies the matrices of the selected bones as JSON onto the clipboard'
-    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -80,27 +78,24 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def render_panel(self, context):
-    layout = self.layout
+class VIEW3D_PT_pose_tools(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "View"
+    bl_label = "Copy Pose"
 
-    col = layout.column(align=True)
-    col.label(text="Real Copy Pose:")
-    row = col.row(align=True)
-    row.operator("pose.copy_as_json", text="Copy as JSON")
-    row.operator("pose.paste_from_json", text="Paste from JSON")
+    def draw(self, context):
+        layout = self.layout
 
-
-def register():
-    from bl_ui.space_view3d_toolbar import VIEW3D_PT_tools_posemode
-
-    bpy.utils.register_class(POSE_OT_copy_as_json)
-    bpy.utils.register_class(POSE_OT_paste_from_json)
-    VIEW3D_PT_tools_posemode.append(render_panel)
+        col = layout.column(align=True)
+        col.operator("pose.copy_as_json", text="Copy as JSON")
+        col.operator("pose.paste_from_json", text="Paste from JSON")
 
 
-def unregister():
-    from bl_ui.space_view3d_toolbar import VIEW3D_PT_tools_posemode
+classes = (
+    POSE_OT_copy_as_json,
+    POSE_OT_paste_from_json,
+    VIEW3D_PT_pose_tools,
+)
 
-    bpy.utils.unregister_class(POSE_OT_copy_as_json)
-    bpy.utils.unregister_class(POSE_OT_paste_from_json)
-    VIEW3D_PT_tools_posemode.remove(render_panel)
+register, unregister = bpy.utils.register_classes_factory(classes)
