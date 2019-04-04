@@ -27,7 +27,8 @@ from bpy.types import Menu, Panel, UIList
 class POSE_OT_copy_as_json(bpy.types.Operator):
     bl_idname = 'pose.copy_as_json'
     bl_label = 'Copy pose as JSON'
-    bl_description = 'Copies the matrices of the selected bones as JSON onto the clipboard'
+    bl_description = 'Copies the matrices of the selected bones as JSON onto ' \
+        'the clipboard'
 
     @classmethod
     def poll(cls, context):
