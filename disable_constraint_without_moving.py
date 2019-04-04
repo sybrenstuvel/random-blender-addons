@@ -8,7 +8,7 @@ bl_info = {
     'name': 'Disable constraint without moving',
     'author': 'Sybren A. Stüvel',
     'version': (1, 0),
-    'blender': (2, 78, 0),
+    'blender': (2, 80, 0),
     'location': 'Constraints panel',
     'category': 'Animation',
     'support': 'COMMUNITY',
@@ -34,7 +34,7 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
         if bone:
             # Convert matrix to world space
             arm = context.active_object
-            mat = arm.matrix_world * bone.matrix
+            mat = arm.matrix_world @ bone.matrix
         else:
             mat = context.active_object.matrix_world
 
@@ -50,7 +50,6 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     bl_label = 'Paste matrix'
     bl_description = 'Pastes the matrix of the clipboard to the currently active pose bone ' \
                      'or object. Uses world-space matrices'
-    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -62,7 +61,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         if bone:
             # Convert matrix to local space
             arm = context.active_object
-            bone.matrix = arm.matrix_world.inverted() * mat
+            bone.matrix = arm.matrix_world.inverted() @ mat
         else:
             context.active_object.matrix_world = mat
 
@@ -78,7 +77,6 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
 class CONSTRAINT_OT_disable_without_moving(bpy.types.Operator):
     bl_idname = 'constraint.disable_without_moving'
     bl_label = 'Disable constraint without moving'
-    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -94,6 +92,20 @@ class CONSTRAINT_OT_disable_without_moving(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class VIEW3D_PT_copy_matrix(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "View"
+    bl_label = "Copy Matrix"
+
+    def draw(self, context):
+        layout = self.layout
+
+        col = layout.column(align=True)
+        col.operator('object.copy_matrix', text="Copy Transform")
+        col.operator('object.paste_matrix', text="Paste Transform")
+
+
 def render_constraint_stuff(self, context):
     if not context.active_object.constraints:
         return
@@ -107,31 +119,21 @@ def render_constraint_stuff(self, context):
     row.operator(CONSTRAINT_OT_disable_without_moving.bl_idname)
 
 
-def render_transform_panel(self, context):
-    box = self.layout.column(align=True)
-    box.label('Visual Transform')
-    row = box.row(align=True)
-    row.operator(OBJECT_OT_copy_matrix.bl_idname, icon='COPYDOWN', text='Copy')
-    row.operator(OBJECT_OT_paste_matrix.bl_idname, icon='PASTEDOWN', text='Paste')
-
+classes = (
+    OBJECT_OT_copy_matrix,
+    OBJECT_OT_paste_matrix,
+    CONSTRAINT_OT_disable_without_moving,
+    VIEW3D_PT_copy_matrix,
+)
+_register, _unregister = bpy.utils.register_classes_factory(classes)
 
 def register():
+    _register()
     bpy.types.WindowManager.disable_constraint = bpy.props.StringProperty()
-
-    bpy.utils.register_class(OBJECT_OT_copy_matrix)
-    bpy.utils.register_class(OBJECT_OT_paste_matrix)
-    bpy.utils.register_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.append(render_constraint_stuff)
-    bpy.types.VIEW3D_PT_tools_transform.append(render_transform_panel)
-    bpy.types.VIEW3D_PT_tools_posemode.append(render_transform_panel)
 
 
 def unregister():
+    _unregister()
     del bpy.types.WindowManager.disable_constraint
-
-    bpy.utils.unregister_class(OBJECT_OT_copy_matrix)
-    bpy.utils.unregister_class(OBJECT_OT_paste_matrix)
-    bpy.utils.unregister_class(CONSTRAINT_OT_disable_without_moving)
     bpy.types.OBJECT_PT_constraints.remove(render_constraint_stuff)
-    bpy.types.VIEW3D_PT_tools_transform.remove(render_transform_panel)
-    bpy.types.VIEW3D_PT_tools_posemode.remove(render_transform_panel)
