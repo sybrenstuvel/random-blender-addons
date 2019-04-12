@@ -10,13 +10,13 @@ by name.
 bl_info = {
     'name': 'Real pose copy',
     'author': 'Sybren A. Stüvel',
-    'version': (1, 0),
+    'version': (1, 1),
     'blender': (2, 80, 0),
     'location': '3D View Numerical Panel > Pose Tools',
     'category': 'Animation',
 }
 
-from collections import defaultdict
+from collections import defaultdict, deque
 import json
 
 import bpy
@@ -32,14 +32,15 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'POSE'
+        return context.mode == 'POSE' and context.selected_pose_bones
 
     def execute(self, context):
+        context.scene.update()
         bone_data = defaultdict(dict)
         for bone in context.selected_pose_bones:
             # Convert matrix to list-of-tuples.
-            vals = [tuple(v) for v in bone.matrix_basis]
-            bone_data[bone.name]['matrix_basis'] = vals
+            vals = [tuple(v) for v in bone.matrix]
+            bone_data[bone.name]['matrix'] = vals
 
         context.window_manager.clipboard = json.dumps(bone_data)
         self.report({'INFO'}, 'Selected pose bone matrices copied.')
@@ -65,15 +66,21 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
             self.report({'ERROR'}, 'No valid JSON on clipboard: %s' % ex)
             return {'CANCELLED'}
 
-        # Apply it to the named bones.
-        bones = context.active_object.pose.bones
-        for bone_name, data in bone_data.items():
-            if bone_name not in bones:
-                self.report({'WARNING'}, 'Ignoring matrix for unknown bone %r' % bone_name)
-                continue
+        # Iterate over bones hierarchically, updating parents before children.
+        bones = deque(bone for bone in context.active_object.pose.bones
+                      if not bone.parent)
+        while bones:
+            bone = bones.popleft()
 
-            bone = bones[bone_name]
-            bone.matrix_basis = Matrix(data['matrix_basis'])
+            try:
+                matrix_components = bone_data[bone.name]['matrix']
+            except KeyError:
+                pass  # This bone is not included in the pose JSON.
+            else:
+                bone.matrix = Matrix(matrix_components)
+                context.scene.update()  # Required due to known issue in Blender.
+
+            bones.extend(bone.children)
 
         self.report({'INFO'}, 'Pose bone matrices pasted.')
         return {'FINISHED'}
