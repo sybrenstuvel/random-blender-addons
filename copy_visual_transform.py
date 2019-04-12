@@ -5,17 +5,38 @@ Really simple add-on for disabling constraints without moving the constrained ob
 """
 
 bl_info = {
-    'name': 'Disable constraint without moving',
+    'name': 'Copy Visual Transform',
     'author': 'Sybren A. Stüvel',
     'version': (1, 0),
     'blender': (2, 80, 0),
-    'location': 'Constraints panel',
+    'location': 'N-panel in the 3D Viewport',
     'category': 'Animation',
     'support': 'COMMUNITY',
-    'warning': 'This is a quickly hacked-together add-on. Let me know if it works for you.',
 }
 
 import bpy
+
+
+def get_matrix(context):
+    bone = context.active_pose_bone
+    if bone:
+        # Convert matrix to world space
+        arm = context.active_object
+        mat = arm.matrix_world @ bone.matrix
+    else:
+        mat = context.active_object.matrix_world
+
+    return mat
+
+
+def set_matrix(context, mat):
+    bone = context.active_pose_bone
+    if bone:
+        # Convert matrix to local space
+        arm = context.active_object
+        bone.matrix = arm.matrix_world.inverted() @ mat
+    else:
+        context.active_object.matrix_world = mat
 
 
 class OBJECT_OT_copy_matrix(bpy.types.Operator):
@@ -28,20 +49,8 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
     def poll(cls, context):
         return bool(context.active_pose_bone) or bool(context.active_object)
 
-    @staticmethod
-    def copy_matrix(context):
-        bone = context.active_pose_bone
-        if bone:
-            # Convert matrix to world space
-            arm = context.active_object
-            mat = arm.matrix_world @ bone.matrix
-        else:
-            mat = context.active_object.matrix_world
-
-        return mat
-
     def execute(self, context):
-        context.window_manager.clipboard = repr(self.copy_matrix(context))
+        context.window_manager.clipboard = repr(get_matrix(context))
         return {'FINISHED'}
 
 
@@ -55,39 +64,11 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     def poll(cls, context):
         return bool(context.active_pose_bone) or bool(context.active_object)
 
-    @staticmethod
-    def paste_matrix(context, mat):
-        bone = context.active_pose_bone
-        if bone:
-            # Convert matrix to local space
-            arm = context.active_object
-            bone.matrix = arm.matrix_world.inverted() @ mat
-        else:
-            context.active_object.matrix_world = mat
-
     def execute(self, context):
         from mathutils import Matrix
 
         mat = eval(context.window_manager.clipboard, {}, {'Matrix': Matrix})
-        self.paste_matrix(context, mat)
-
-        return {'FINISHED'}
-
-
-class CONSTRAINT_OT_disable_without_moving(bpy.types.Operator):
-    bl_idname = 'constraint.disable_without_moving'
-    bl_label = 'Disable constraint without moving'
-
-    @classmethod
-    def poll(cls, context):
-        return (OBJECT_OT_paste_matrix.poll(context)
-                and OBJECT_OT_copy_matrix.poll(context)
-                and context.window_manager.disable_constraint in context.active_object.constraints)
-
-    def execute(self, context):
-        mat = OBJECT_OT_copy_matrix.copy_matrix(context)
-        context.active_object.constraints[context.window_manager.disable_constraint].influence = 0.0
-        OBJECT_OT_paste_matrix.paste_matrix(context, mat)
+        set_matrix(context, mat)
 
         return {'FINISHED'}
 
@@ -122,18 +103,6 @@ def render_constraint_stuff(self, context):
 classes = (
     OBJECT_OT_copy_matrix,
     OBJECT_OT_paste_matrix,
-    CONSTRAINT_OT_disable_without_moving,
     VIEW3D_PT_copy_matrix,
 )
-_register, _unregister = bpy.utils.register_classes_factory(classes)
-
-def register():
-    _register()
-    bpy.types.WindowManager.disable_constraint = bpy.props.StringProperty()
-    bpy.types.OBJECT_PT_constraints.append(render_constraint_stuff)
-
-
-def unregister():
-    _unregister()
-    del bpy.types.WindowManager.disable_constraint
-    bpy.types.OBJECT_PT_constraints.remove(render_constraint_stuff)
+register, unregister = bpy.utils.register_classes_factory(classes)
