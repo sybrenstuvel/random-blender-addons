@@ -15,8 +15,8 @@ http://code.blender.org/2015/10/debugging-python-code-with-pycharm/
 bl_info = {
     'name': 'Remote debugger',
     'author': 'Sybren A. Stüvel',
-    'version': (0, 3),
-    'blender': (2, 75, 0),
+    'version': (0, 4),
+    'blender': (2, 80, 0),
     'location': 'Press [Space], search for "debugger"',
     'category': 'Development',
 }
@@ -25,6 +25,16 @@ import bpy
 import os.path
 from bpy.types import AddonPreferences
 from bpy.props import StringProperty
+
+
+def addon_preferences(context):
+    try:
+        preferences = context.preferences
+    except AttributeError:
+        # Old (<2.80) location of user preferences
+        preferences = context.user_preferences
+
+    return preferences.addons[__name__].preferences
 
 
 class DebuggerAddonPreferences(AddonPreferences):
@@ -60,9 +70,7 @@ class DEBUG_OT_connect_debugger_pycharm(bpy.types.Operator):
     def execute(self, context):
         import sys
 
-        user_preferences = context.user_preferences
-        addon_prefs = user_preferences.addons[__name__].preferences
-
+        addon_prefs = addon_preferences(context)
         eggpath = os.path.abspath(addon_prefs.eggpath)
 
         if not os.path.exists(eggpath):
@@ -88,9 +96,7 @@ class DEBUG_OT_connect_debugger_pydev(bpy.types.Operator):
     def execute(self, context):
         import sys
 
-        user_preferences = context.user_preferences
-        addon_prefs = user_preferences.addons[__name__].preferences
-
+        addon_prefs = addon_preferences(context)
         pydevpath = os.path.abspath(addon_prefs.pydevpath)
 
         if not os.path.exists(pydevpath):
