@@ -7,8 +7,8 @@ Really simple add-on for disabling constraints without moving the constrained ob
 bl_info = {
     'name': 'Copy Visual Transform',
     'author': 'Sybren A. Stüvel',
-    'version': (1, 0),
-    'blender': (2, 80, 0),
+    'version': (1, 1),
+    'blender': (2, 81, 0),
     'location': 'N-panel in the 3D Viewport',
     'category': 'Animation',
     'support': 'COMMUNITY',
