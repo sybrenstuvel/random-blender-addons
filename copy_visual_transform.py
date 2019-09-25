@@ -87,19 +87,6 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         col.operator('object.paste_matrix', text="Paste Transform")
 
 
-def render_constraint_stuff(self, context):
-    if not context.active_object.constraints:
-        return
-
-    row = self.layout.row(align=True)
-    row.prop_search(
-        context.window_manager, 'disable_constraint',
-        context.object, 'constraints',
-        text='',
-        icon='CONSTRAINT')
-    row.operator(CONSTRAINT_OT_disable_without_moving.bl_idname)
-
-
 classes = (
     OBJECT_OT_copy_matrix,
     OBJECT_OT_paste_matrix,
