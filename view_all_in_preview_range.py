@@ -28,6 +28,8 @@ bl_info = {
     'support': 'COMMUNITY',
 }
 
+import math
+
 import bpy
 
 class GRAPH_OT_view_preview(bpy.types.Operator):
@@ -48,12 +50,27 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         min_frame: float = context.scene.frame_preview_start
         max_frame: float = context.scene.frame_preview_end
 
+        do_euler_scaling: bool = context.scene.unit_settings.system_rotation == 'DEGREES'
+
         for fcurve in context.editable_fcurves:
+            do_scale_value: bool = do_euler_scaling and fcurve.data_path == 'rotation_euler'
+            # print(f'FCurve: {fcurve.data_path}[{fcurve.array_index}] scaling: {do_scale_value}')
+
             for key in fcurve.keyframe_points:
                 if not min_frame <= key.co.x <= max_frame:
                     continue
-                min_value = min(min_value, key.co.y)
-                max_value = max(max_value, key.co.y)
+
+                if do_scale_value:
+                    # World is using degrees, so the graph is drawn in degrees,
+                    # but the value in the FCurve is still radians.
+                    curve_value = math.degrees(key.co.y)
+                else:
+                    curve_value = key.co.y
+
+                min_value = min(min_value, curve_value)
+                max_value = max(max_value, curve_value)
+        # print(f'Frame range: {min_frame} - {max_frame}')
+        # print(f'Value range: {min_value:.2} - {max_value:.2}')
 
         # This is required as otherwise view_to_region() may have to deal with
         # out-of-view values, which it will return bogus values for.
@@ -62,11 +79,11 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         xmin, ymin = context.region.view2d.view_to_region(min_frame, min_value)
         xmax, ymax = context.region.view2d.view_to_region(max_frame, max_value)
 
-        margin = 0.05
-        xmin *= (1-margin)
-        xmax *= (1+margin)
-        ymin *= (1-margin)
-        ymax *= (1+margin)
+        # Add a bit of margin.
+        xmin -= 15
+        xmax += 15
+        ymin -= 15
+        ymax += 20
 
         return bpy.ops.view2d.zoom_border(
             xmin=xmin, xmax=xmax,
