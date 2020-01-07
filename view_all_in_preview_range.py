@@ -35,12 +35,15 @@ import bpy
 class GRAPH_OT_view_preview(bpy.types.Operator):
     bl_idname = 'graph.view_preview'
     bl_label = 'View All in Preview Range'
+    bl_description = ('Zoom the Graph Editor such that it shows all data in the Preview Range. '
+                      'Not compatible with Normalized view')
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
         return (
             context.scene is not None
             and context.scene.use_preview_range
+            and not getattr(context.space_data, 'use_normalization', False)
             and bool(getattr(context, 'editable_fcurves', False))
         )
 
@@ -53,7 +56,10 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         do_euler_scaling: bool = context.scene.unit_settings.system_rotation == 'DEGREES'
 
         for fcurve in context.editable_fcurves:
-            do_scale_value: bool = do_euler_scaling and fcurve.data_path == 'rotation_euler'
+            do_scale_value: bool = (
+                do_euler_scaling and
+                (fcurve.data_path == 'rotation_euler' or fcurve.data_path.endswith('.rotation_euler'))
+            )
             # print(f'FCurve: {fcurve.data_path}[{fcurve.array_index}] scaling: {do_scale_value}')
 
             for key in fcurve.keyframe_points:
@@ -66,11 +72,12 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
                     curve_value = math.degrees(key.co.y)
                 else:
                     curve_value = key.co.y
+                assert isinstance(curve_value, float)
 
                 min_value = min(min_value, curve_value)
                 max_value = max(max_value, curve_value)
         # print(f'Frame range: {min_frame} - {max_frame}')
-        # print(f'Value range: {min_value:.2} - {max_value:.2}')
+        # print(f'Value range: {min_value:.2f} - {max_value:.2f}')
 
         # This is required as otherwise view_to_region() may have to deal with
         # out-of-view values, which it will return bogus values for.
@@ -80,10 +87,10 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         xmax, ymax = context.region.view2d.view_to_region(max_frame, max_value)
 
         # Add a bit of margin.
-        xmin -= 15
-        xmax += 15
-        ymin -= 15
-        ymax += 20
+        xmin -= 10
+        xmax += 10
+        ymin -= 50 if context.space_data.show_markers else 15
+        ymax += 35
 
         return bpy.ops.view2d.zoom_border(
             xmin=xmin, xmax=xmax,
