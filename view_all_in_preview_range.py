@@ -21,7 +21,7 @@ bl_info = {
     'author': 'Sybren A. Stüvel',
     'description': 'Similar to the View All option (the home key), except '
                    'that it only considers keyframes in the preview range.',
-    'version': (1, 2),
+    'version': (1, 3),
     'blender': (2, 82, 0),
     'location': 'View menu in Graph Editor',
     'category': 'Animation',
