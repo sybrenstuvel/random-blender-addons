@@ -89,7 +89,7 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
             xmax, ymax = context.region.view2d.view_to_region(max_frame, max_value, clip=False)
 
             # print(f'Frame remap: {xmin} - {xmax}')
-            print(f'Value remap: {ymin:.2f} - {ymax:.2f}')
+            # print(f'Value remap: {ymin:.2f} - {ymax:.2f}')
 
             # Add a bit of margin.
             xmin -= 40
