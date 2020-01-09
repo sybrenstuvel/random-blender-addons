@@ -34,15 +34,14 @@ import bpy
 
 class GRAPH_OT_view_preview(bpy.types.Operator):
     bl_idname = 'graph.view_preview'
-    bl_label = 'View All in Preview Range'
-    bl_description = ('Zoom the Graph Editor such that it shows all data in the Preview Range. '
+    bl_label = 'View All in Range'
+    bl_description = ('Zoom the Graph Editor such that it shows all data in the Scene/Preview Range. '
                       'Not compatible with Normalized view')
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
         return (
             context.scene is not None
-            and context.scene.use_preview_range
             and not getattr(context.space_data, 'use_normalization', False)
             and bool(getattr(context, 'editable_fcurves', False))
         )
@@ -50,8 +49,13 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
         min_value: float = float('inf')
         max_value: float = float('-inf')
-        min_frame: float = context.scene.frame_preview_start
-        max_frame: float = context.scene.frame_preview_end
+
+        if context.scene.use_preview_range:
+            min_frame: float = context.scene.frame_preview_start
+            max_frame: float = context.scene.frame_preview_end
+        else:
+            min_frame = context.scene.frame_start
+            max_frame = context.scene.frame_end
 
         do_euler_scaling: bool = context.scene.unit_settings.system_rotation == 'DEGREES'
 
@@ -100,8 +104,6 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
             if context.space_data.show_markers:
                 ymin -= 35
 
-            # ymin = max(0, ymin)
-
             bpy.ops.view2d.zoom_border(
                 xmin=xmin, xmax=xmax,
                 ymin=ymin, ymax=ymax,
@@ -109,7 +111,11 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         return {'FINISHED'}
 
 def draw_menu(self, context):
-    self.layout.operator('graph.view_preview')
+    if context.scene.use_preview_range:
+        label = 'View All in Preview Range'
+    else:
+        label = 'View All in Scene Range'
+    self.layout.operator('graph.view_preview', text=label)
 
 def register():
     bpy.types.GRAPH_MT_view.append(draw_menu)
