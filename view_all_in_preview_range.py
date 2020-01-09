@@ -92,10 +92,13 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
             print(f'Value remap: {ymin:.2f} - {ymax:.2f}')
 
             # Add a bit of margin.
-            xmin -= 10
-            xmax += 10
-            ymin -= 50 if context.space_data.show_markers else 15
+            xmin -= 40
+            xmax += 40
+
+            ymin -= 40
             ymax += 40
+            if context.space_data.show_markers:
+                ymin -= 35
 
             # ymin = max(0, ymin)
 
