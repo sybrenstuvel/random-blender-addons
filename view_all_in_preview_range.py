@@ -21,7 +21,7 @@ bl_info = {
     'author': 'Sybren A. Stüvel',
     'description': 'Similar to the View All option (the home key), except '
                    'that it only considers keyframes in the preview range.',
-    'version': (1, 3),
+    'version': (1, 4),
     'blender': (2, 82, 0),
     'location': 'View menu in Graph Editor',
     'category': 'Animation',
@@ -29,33 +29,37 @@ bl_info = {
 }
 
 import math
+from typing import Tuple
 
 import bpy
 
 class GRAPH_OT_view_preview(bpy.types.Operator):
     bl_idname = 'graph.view_preview'
     bl_label = 'View All in Range'
-    bl_description = ('Zoom the Graph Editor such that it shows all data in the Scene/Preview Range. '
-                      'Not compatible with Normalized view')
+    bl_description = 'Zoom the Graph Editor such that it shows all data in the Scene/Preview Range'
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
         return (
             context.scene is not None
-            and not getattr(context.space_data, 'use_normalization', False)
             and bool(getattr(context, 'editable_fcurves', False))
         )
 
-    def execute(self, context: bpy.types.Context):
-        min_value: float = float('inf')
-        max_value: float = float('-inf')
-
+    def _find_min_max_frame(self, context: bpy.types.Context) -> Tuple[int, int]:
         if context.scene.use_preview_range:
-            min_frame: float = context.scene.frame_preview_start
-            max_frame: float = context.scene.frame_preview_end
-        else:
-            min_frame = context.scene.frame_start
-            max_frame = context.scene.frame_end
+            return context.scene.frame_preview_start, context.scene.frame_preview_end
+        return context.scene.frame_start, context.scene.frame_end
+
+
+    def _find_min_max_value(self, context: bpy.types.Context,
+                            min_frame: int, max_frame: int) -> Tuple[float, float]:
+
+        if context.space_data.use_normalization:
+            # We know the min/max value here.
+            return -1.0, 1.0
+
+        min_value = float('inf')
+        max_value = float('-inf')
 
         do_euler_scaling: bool = context.scene.unit_settings.system_rotation == 'DEGREES'
 
@@ -83,6 +87,10 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         # print(f'Frame range: {min_frame} - {max_frame}')
         # print(f'Value range: {min_value:.2f} - {max_value:.2f}')
 
+    def execute(self, context: bpy.types.Context):
+        min_frame, max_frame = self._find_min_max_frame(context)
+        min_value, max_value = self._find_min_max_value(context, min_frame, max_frame)
+
         # view_to_region() converts from view coordinates (so x=frames and
         # y=fcurve values) in floats to pixels on screen in integers. This means
         # that if the area we zoom to is relatively small on screen, we have a
@@ -100,7 +108,7 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
             xmax += 40
 
             ymin -= 40
-            ymax += 40
+            ymax += 50
             if context.space_data.show_markers:
                 ymin -= 35
 
@@ -108,6 +116,7 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
                 xmin=xmin, xmax=xmax,
                 ymin=ymin, ymax=ymax,
                 wait_for_input=False, zoom_out=False)
+
         return {'FINISHED'}
 
 def draw_menu(self, context):
