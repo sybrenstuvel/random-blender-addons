@@ -21,7 +21,7 @@ bl_info = {
     'author': 'Sybren A. Stüvel',
     'description': 'Similar to the View All option (the home key), except '
                    'that it only considers keyframes in the preview range.',
-    'version': (1, 0),
+    'version': (1, 2),
     'blender': (2, 82, 0),
     'location': 'View menu in Graph Editor',
     'category': 'Animation',
@@ -79,24 +79,31 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
         # print(f'Frame range: {min_frame} - {max_frame}')
         # print(f'Value range: {min_value:.2f} - {max_value:.2f}')
 
-        # This is required as otherwise view_to_region() may have to deal with
-        # out-of-view values, which it will return bogus values for.
-        bpy.ops.graph.view_all()
+        # view_to_region() converts from view coordinates (so x=frames and
+        # y=fcurve values) in floats to pixels on screen in integers. This means
+        # that if the area we zoom to is relatively small on screen, we have a
+        # big roundoff error there. As a quick fix we just do the zooming &
+        # panning multiple times.
+        for _ in range(3):
+            xmin, ymin = context.region.view2d.view_to_region(min_frame, min_value, clip=False)
+            xmax, ymax = context.region.view2d.view_to_region(max_frame, max_value, clip=False)
 
-        xmin, ymin = context.region.view2d.view_to_region(min_frame, min_value)
-        xmax, ymax = context.region.view2d.view_to_region(max_frame, max_value)
+            # print(f'Frame remap: {xmin} - {xmax}')
+            print(f'Value remap: {ymin:.2f} - {ymax:.2f}')
 
-        # Add a bit of margin.
-        xmin -= 10
-        xmax += 10
-        ymin -= 50 if context.space_data.show_markers else 15
-        ymax += 35
+            # Add a bit of margin.
+            xmin -= 10
+            xmax += 10
+            ymin -= 50 if context.space_data.show_markers else 15
+            ymax += 40
 
-        return bpy.ops.view2d.zoom_border(
-            xmin=xmin, xmax=xmax,
-            ymin=ymin, ymax=ymax,
-            wait_for_input=False, zoom_out=False)
+            # ymin = max(0, ymin)
 
+            bpy.ops.view2d.zoom_border(
+                xmin=xmin, xmax=xmax,
+                ymin=ymin, ymax=ymax,
+                wait_for_input=False, zoom_out=False)
+        return {'FINISHED'}
 
 def draw_menu(self, context):
     self.layout.operator('graph.view_preview')
