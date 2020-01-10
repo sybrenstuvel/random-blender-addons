@@ -21,7 +21,7 @@ bl_info = {
     'author': 'Sybren A. Stüvel',
     'description': 'Similar to the View All option (the home key), except '
                    'that it only considers keyframes in the preview range.',
-    'version': (1, 4),
+    'version': (1, 4, 1),
     'blender': (2, 82, 0),
     'location': 'View menu in Graph Editor',
     'category': 'Animation',
@@ -86,6 +86,7 @@ class GRAPH_OT_view_preview(bpy.types.Operator):
                 max_value = max(max_value, curve_value)
         # print(f'Frame range: {min_frame} - {max_frame}')
         # print(f'Value range: {min_value:.2f} - {max_value:.2f}')
+        return min_value, max_value
 
     def execute(self, context: bpy.types.Context):
         min_frame, max_frame = self._find_min_max_frame(context)
