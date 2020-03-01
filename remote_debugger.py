@@ -15,7 +15,7 @@ http://code.blender.org/2015/10/debugging-python-code-with-pycharm/
 bl_info = {
     'name': 'Remote debugger',
     'author': 'Sybren A. Stüvel',
-    'version': (0, 4),
+    'version': (0, 4, 1),
     'blender': (2, 80, 0),
     'location': 'Press [Space], search for "debugger"',
     'category': 'Development',
@@ -130,8 +130,8 @@ class DEBUG_OT_connect_debugger_pycharm(bpy.types.Operator):
         if not any('pycharm-debug' in p for p in sys.path):
             sys.path.append(eggpath)
 
-        import pydevd
-        pydevd.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True,
+        import pydevd_pycharm
+        pydevd_pycharm.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True,
                         suspend=False)
 
         return {'FINISHED'}
