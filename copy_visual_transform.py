@@ -166,8 +166,8 @@ def set_matrix(context, mat):
     bone = context.active_pose_bone
     if bone:
         # Convert matrix to local space
-        arm = context.active_object
-        bone.matrix = arm.matrix_world.inverted() @ mat
+        arm_eval = context.active_object.evaluated_get(context.view_layer.depsgraph)
+        bone.matrix = arm_eval.matrix_world.inverted() @ mat
         AutoKeying.autokey_transformation(context, bone)
     else:
         context.active_object.matrix_world = mat
@@ -185,7 +185,10 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
         return bool(context.active_pose_bone) or bool(context.active_object)
 
     def execute(self, context) -> Set[str]:
-        context.window_manager.clipboard = repr(get_matrix(context))
+        mat = get_matrix(context)
+        rows = [f'            {tuple(row)!r},' for row in mat]
+        as_string = '\n'.join(rows)
+        context.window_manager.clipboard = f'Matrix((\n{as_string}\n        ))'
         return {'FINISHED'}
 
 
@@ -220,6 +223,31 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         col = layout.column(align=True)
         col.operator('object.copy_matrix', text="Copy Transform")
         col.operator('object.paste_matrix', text="Paste Transform")
+
+        if context.object:
+            self.draw_evaluated_transform(context)
+
+    def draw_evaluated_transform(self, context):
+        depsgraph = context.evaluated_depsgraph_get()
+        ob_eval = context.object.evaluated_get(depsgraph)
+        (trans, rot, scale) = ob_eval.matrix_world.decompose()
+
+        col = self.layout.column(align=False)
+        col.label(text='Evaluated Transform:')
+
+        grid = col.grid_flow(row_major=True, columns=4, align=True)
+        grid.label(text='T')
+        grid.label(text=f'{trans.x:.3}')
+        grid.label(text=f'{trans.y:.3}')
+        grid.label(text=f'{trans.z:.3}')
+        grid.label(text='R')
+        grid.label(text=f'{rot.x:.3}')
+        grid.label(text=f'{rot.y:.3}')
+        grid.label(text=f'{rot.z:.3}')
+        grid.label(text='S')
+        grid.label(text=f'{scale.x:.3}')
+        grid.label(text=f'{scale.y:.3}')
+        grid.label(text=f'{scale.z:.3}')
 
 
 classes = (
