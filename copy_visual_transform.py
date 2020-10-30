@@ -35,6 +35,7 @@ bl_info = {
 from typing import Iterable, Optional, Set, Union
 
 import bpy
+import mathutils
 
 
 class AutoKeying:
@@ -208,15 +209,33 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     def poll(cls, context) -> bool:
         return bool(context.active_pose_bone) or bool(context.active_object)
 
+    @staticmethod
+    def parse_print_m4(value: str) -> Optional[mathutils.Matrix]:
+        """Parse output from Blender's print_m4() function.
+
+        Expects four lines of space-separated floats.
+        """
+
+        lines = value.strip().splitlines()
+        if len(lines) != 4:
+            return None
+
+        floats = tuple(tuple(float(item) for item in line.split()) for line in lines)
+        return mathutils.Matrix(floats)
+
     def execute(self, context) -> Set[str]:
         from mathutils import Matrix
 
         clipboard = context.window_manager.clipboard
-        if clipboard.startswith('Matrix'):
-            mat = eval(clipboard, {}, {'Matrix': Matrix})
+        if clipboard.startswith("Matrix"):
+            mat = eval(clipboard, {}, {"Matrix": Matrix})
         else:
-            # Try and parse output from Blender's print_m4() function (space-and-newline separated floats)
-            mat = parse_print_m4(clipboard)
+            mat = self.parse_print_m4(clipboard)
+
+        if mat is None:
+            self.report({"ERROR"}, "Clipboard does not contain a valid matrix.")
+            return {"CANCELLED"}
+
         set_matrix(context, mat)
 
         return {"FINISHED"}
