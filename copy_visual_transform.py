@@ -211,7 +211,12 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     def execute(self, context) -> Set[str]:
         from mathutils import Matrix
 
-        mat = eval(context.window_manager.clipboard, {}, {"Matrix": Matrix})
+        clipboard = context.window_manager.clipboard
+        if clipboard.startswith('Matrix'):
+            mat = eval(clipboard, {}, {'Matrix': Matrix})
+        else:
+            # Try and parse output from Blender's print_m4() function (space-and-newline separated floats)
+            mat = parse_print_m4(clipboard)
         set_matrix(context, mat)
 
         return {"FINISHED"}
@@ -220,7 +225,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
 class VIEW3D_PT_copy_matrix(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "View"
+    bl_category = "Clipboard"
     bl_label = "Copy Matrix"
 
     def draw(self, context) -> None:
