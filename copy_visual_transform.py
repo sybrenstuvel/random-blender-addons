@@ -1,4 +1,4 @@
-#====================== BEGIN GPL LICENSE BLOCK ======================
+# ====================== BEGIN GPL LICENSE BLOCK ======================
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
@@ -14,7 +14,7 @@
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-#======================= END GPL LICENSE BLOCK ========================
+# ======================= END GPL LICENSE BLOCK ========================
 
 """
 Disable constraints without moving.
@@ -23,13 +23,13 @@ Really simple add-on for disabling constraints without moving the constrained ob
 """
 
 bl_info = {
-    'name': 'Copy Visual Transform',
-    'author': 'Sybren A. Stüvel',
-    'version': (1, 1),
-    'blender': (2, 81, 0),
-    'location': 'N-panel in the 3D Viewport',
-    'category': 'Animation',
-    'support': 'COMMUNITY',
+    "name": "Copy Visual Transform",
+    "author": "Sybren A. Stüvel",
+    "version": (1, 1),
+    "blender": (2, 81, 0),
+    "location": "N-panel in the 3D Viewport",
+    "category": "Animation",
+    "support": "COMMUNITY",
 }
 
 from typing import Iterable, Optional, Set, Union
@@ -52,13 +52,13 @@ class AutoKeying:
         options = set()
 
         if prefs.edit.use_visual_keying:
-            options.add('INSERTKEY_VISUAL')
+            options.add("INSERTKEY_VISUAL")
         if prefs.edit.use_keyframe_insert_needed:
-            options.add('INSERTKEY_NEEDED')
+            options.add("INSERTKEY_NEEDED")
         if prefs.edit.use_insertkey_xyz_to_rgb:
-            options.add('INSERTKEY_XYZ_TO_RGB')
+            options.add("INSERTKEY_XYZ_TO_RGB")
         if ts.use_keyframe_cycle_aware:
-            options.add('INSERTKEY_CYCLE_AWARE')
+            options.add("INSERTKEY_CYCLE_AWARE")
         return options
 
     @classmethod
@@ -78,9 +78,9 @@ class AutoKeying:
         options = cls.keying_options(context)
 
         if prefs.edit.use_keyframe_insert_available:
-            options.add('INSERTKEY_AVAILABLE')
-        if ts.auto_keying_mode == 'REPLACE_KEYS':
-            options.add('INSERTKEY_REPLACE')
+            options.add("INSERTKEY_AVAILABLE")
+        if ts.auto_keying_mode == "REPLACE_KEYS":
+            options.add("INSERTKEY_REPLACE")
         return options
 
     @staticmethod
@@ -93,12 +93,12 @@ class AutoKeying:
 
     @staticmethod
     def keyframe_channels(
-            target: Union[bpy.types.Object, bpy.types.PoseBone],
-            options: Set[str],
-            data_path: str,
-            group: str,
-            locks: Iterable[bool],
-        ) -> None:
+        target: Union[bpy.types.Object, bpy.types.PoseBone],
+        options: Set[str],
+        data_path: str,
+        group: str,
+        locks: Iterable[bool],
+    ) -> None:
         if all(locks):
             return
 
@@ -113,35 +113,37 @@ class AutoKeying:
 
     @classmethod
     def key_transformation(
-            cls,
-            target: Union[bpy.types.Object, bpy.types.PoseBone],
-            options: Set[str],
-        ) -> None:
+        cls,
+        target: Union[bpy.types.Object, bpy.types.PoseBone],
+        options: Set[str],
+    ) -> None:
         """Keyframe transformation properties, avoiding keying locked channels."""
 
         is_bone = isinstance(target, bpy.types.PoseBone)
         if is_bone:
             group = target.name
         else:
-            group = 'Object Transforms'
+            group = "Object Transforms"
 
         def keyframe(data_path, locks):
             cls.keyframe_channels(target, options, data_path, group, locks)
 
         if not (is_bone and target.bone.use_connect):
-            keyframe('location', target.lock_location)
+            keyframe("location", target.lock_location)
 
-        if target.rotation_mode == 'QUATERNION':
-            keyframe('rotation_quaternion', cls.get_4d_rotlock(target))
-        elif target.rotation_mode == 'AXIS_ANGLE':
-            keyframe('rotation_axis_angle', cls.get_4d_rotlock(target))
+        if target.rotation_mode == "QUATERNION":
+            keyframe("rotation_quaternion", cls.get_4d_rotlock(target))
+        elif target.rotation_mode == "AXIS_ANGLE":
+            keyframe("rotation_axis_angle", cls.get_4d_rotlock(target))
         else:
-            keyframe('rotation_euler', target.lock_rotation)
+            keyframe("rotation_euler", target.lock_rotation)
 
-        keyframe('scale', target.lock_scale)
+        keyframe("scale", target.lock_scale)
 
     @classmethod
-    def autokey_transformation(cls, context, target: Union[bpy.types.Object, bpy.types.PoseBone]) -> None:
+    def autokey_transformation(
+        cls, context, target: Union[bpy.types.Object, bpy.types.PoseBone]
+    ) -> None:
         """Auto-key transformation properties."""
 
         options = cls.autokeying_options(context)
@@ -175,10 +177,12 @@ def set_matrix(context, mat):
 
 
 class OBJECT_OT_copy_matrix(bpy.types.Operator):
-    bl_idname = 'object.copy_matrix'
-    bl_label = 'Copy matrix'
-    bl_description = 'Copies the matrix of the currently active object or pose bone ' \
-                     'to the clipboard. Uses world-space matrices'
+    bl_idname = "object.copy_matrix"
+    bl_label = "Copy matrix"
+    bl_description = (
+        "Copies the matrix of the currently active object or pose bone "
+        "to the clipboard. Uses world-space matrices"
+    )
 
     @classmethod
     def poll(cls, context) -> bool:
@@ -186,17 +190,19 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
 
     def execute(self, context) -> Set[str]:
         mat = get_matrix(context)
-        rows = [f'            {tuple(row)!r},' for row in mat]
-        as_string = '\n'.join(rows)
-        context.window_manager.clipboard = f'Matrix((\n{as_string}\n        ))'
-        return {'FINISHED'}
+        rows = [f"            {tuple(row)!r}," for row in mat]
+        as_string = "\n".join(rows)
+        context.window_manager.clipboard = f"Matrix((\n{as_string}\n        ))"
+        return {"FINISHED"}
 
 
 class OBJECT_OT_paste_matrix(bpy.types.Operator):
-    bl_idname = 'object.paste_matrix'
-    bl_label = 'Paste matrix'
-    bl_description = 'Pastes the matrix of the clipboard to the currently active pose bone ' \
-                     'or object. Uses world-space matrices'
+    bl_idname = "object.paste_matrix"
+    bl_label = "Paste matrix"
+    bl_description = (
+        "Pastes the matrix of the clipboard to the currently active pose bone "
+        "or object. Uses world-space matrices"
+    )
 
     @classmethod
     def poll(cls, context) -> bool:
@@ -205,15 +211,15 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     def execute(self, context) -> Set[str]:
         from mathutils import Matrix
 
-        mat = eval(context.window_manager.clipboard, {}, {'Matrix': Matrix})
+        mat = eval(context.window_manager.clipboard, {}, {"Matrix": Matrix})
         set_matrix(context, mat)
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class VIEW3D_PT_copy_matrix(bpy.types.Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_category = "View"
     bl_label = "Copy Matrix"
 
@@ -221,8 +227,8 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.operator('object.copy_matrix', text="Copy Transform")
-        col.operator('object.paste_matrix', text="Paste Transform")
+        col.operator("object.copy_matrix", text="Copy Transform")
+        col.operator("object.paste_matrix", text="Paste Transform")
 
         if context.object:
             self.draw_evaluated_transform(context)
@@ -233,21 +239,21 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         (trans, rot, scale) = ob_eval.matrix_world.decompose()
 
         col = self.layout.column(align=False)
-        col.label(text='Evaluated Transform:')
+        col.label(text="Evaluated Transform:")
 
         grid = col.grid_flow(row_major=True, columns=4, align=True)
-        grid.label(text='T')
-        grid.label(text=f'{trans.x:.3}')
-        grid.label(text=f'{trans.y:.3}')
-        grid.label(text=f'{trans.z:.3}')
-        grid.label(text='R')
-        grid.label(text=f'{rot.x:.3}')
-        grid.label(text=f'{rot.y:.3}')
-        grid.label(text=f'{rot.z:.3}')
-        grid.label(text='S')
-        grid.label(text=f'{scale.x:.3}')
-        grid.label(text=f'{scale.y:.3}')
-        grid.label(text=f'{scale.z:.3}')
+        grid.label(text="T")
+        grid.label(text=f"{trans.x:.3}")
+        grid.label(text=f"{trans.y:.3}")
+        grid.label(text=f"{trans.z:.3}")
+        grid.label(text="R")
+        grid.label(text=f"{rot.x:.3}")
+        grid.label(text=f"{rot.y:.3}")
+        grid.label(text=f"{rot.z:.3}")
+        grid.label(text="S")
+        grid.label(text=f"{scale.x:.3}")
+        grid.label(text=f"{scale.y:.3}")
+        grid.label(text=f"{scale.z:.3}")
 
 
 classes = (
