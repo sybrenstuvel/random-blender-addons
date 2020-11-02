@@ -184,6 +184,7 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
         "Copies the matrix of the currently active object or pose bone "
         "to the clipboard. Uses world-space matrices"
     )
+    bl_options = {"REGISTER"}  # This operator cannot be un-done.
 
     @classmethod
     def poll(cls, context) -> bool:
@@ -204,6 +205,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         "Pastes the matrix of the clipboard to the currently active pose bone "
         "or object. Uses world-space matrices"
     )
+    bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context) -> bool:
