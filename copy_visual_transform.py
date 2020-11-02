@@ -259,13 +259,11 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         if context.object:
             self.draw_evaluated_transform(context)
 
-    def draw_evaluated_transform(self, context):
-        depsgraph = context.evaluated_depsgraph_get()
-        ob_eval = context.object.evaluated_get(depsgraph)
-        (trans, rot, scale) = ob_eval.matrix_world.decompose()
+    def draw_decomposed_matrix(self, label: str, matrix: mathutils.Matrix) -> None:
+        (trans, rot, scale) = matrix.decompose()
 
         col = self.layout.column(align=False)
-        col.label(text="Evaluated Transform:")
+        col.label(text=label)
 
         grid = col.grid_flow(row_major=True, columns=4, align=True)
         grid.label(text="T")
@@ -280,6 +278,13 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         grid.label(text=f"{scale.x:.3}")
         grid.label(text=f"{scale.y:.3}")
         grid.label(text=f"{scale.z:.3}")
+
+    def draw_evaluated_transform(self, context):
+        depsgraph = context.evaluated_depsgraph_get()
+        ob_eval = context.object.evaluated_get(depsgraph)
+
+        self.draw_decomposed_matrix("Evaluated Transform:", ob_eval.matrix_world)
+        self.draw_decomposed_matrix("Parent Inverse:", ob_eval.matrix_parent_inverse)
 
 
 classes = (
