@@ -35,7 +35,7 @@ bl_info = {
 from typing import Iterable, Optional, Set, Union
 
 import bpy
-import mathutils
+from mathutils import Matrix
 
 
 class AutoKeying:
@@ -212,7 +212,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         return bool(context.active_pose_bone) or bool(context.active_object)
 
     @staticmethod
-    def parse_print_m4(value: str) -> Optional[mathutils.Matrix]:
+    def parse_print_m4(value: str) -> Optional[Matrix]:
         """Parse output from Blender's print_m4() function.
 
         Expects four lines of space-separated floats.
@@ -223,11 +223,9 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
             return None
 
         floats = tuple(tuple(float(item) for item in line.split()) for line in lines)
-        return mathutils.Matrix(floats)
+        return Matrix(floats)
 
     def execute(self, context) -> Set[str]:
-        from mathutils import Matrix
-
         clipboard = context.window_manager.clipboard
         if clipboard.startswith("Matrix"):
             mat = eval(clipboard, {}, {"Matrix": Matrix})
@@ -259,7 +257,7 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         if context.object:
             self.draw_evaluated_transform(context)
 
-    def draw_decomposed_matrix(self, label: str, matrix: mathutils.Matrix) -> None:
+    def draw_decomposed_matrix(self, label: str, matrix: Matrix) -> None:
         (trans, rot, scale) = matrix.decompose()
 
         col = self.layout.column(align=False)
