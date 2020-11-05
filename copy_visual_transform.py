@@ -244,8 +244,8 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
 
 class POSE_OT_matrix_to_matrix_basis(bpy.types.Operator):
     bl_idname = "pose.matrix_to_matrix_basis"
-    bl_label = "Bone Matrix to Basis"
-    bl_description = "Copy the pose bone `matrix` to `matrix_basis`"
+    bl_label = "Bake Selected Bones"
+    bl_description = "Copy the evaluated transform to the local transform of selected pose bones, and disable constraints"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
