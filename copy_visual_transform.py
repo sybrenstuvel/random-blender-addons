@@ -32,6 +32,7 @@ bl_info = {
     "support": "COMMUNITY",
 }
 
+import math
 from typing import Dict, Iterable, Optional, Set, Union
 
 import bpy
@@ -241,6 +242,52 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class POSE_OT_matrix_to_matrix_basis(bpy.types.Operator):
+    bl_idname = "pose.matrix_to_matrix_basis"
+    bl_label = "Bone Matrix to Basis"
+    bl_description = "Copy the pose bone `matrix` to `matrix_basis`"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context) -> bool:
+        return bool(context.selected_pose_bones)
+
+    def execute(self, context) -> Set[str]:
+        matrices = self.matrices_to_bake(context.selected_pose_bones)
+        self.disable_constraints(context.selected_pose_bones)
+        self.set_matrices(context.pose_object, matrices)
+        return {"FINISHED"}
+
+    def matrices_to_bake(self, selected_pose_bones) -> Dict[str, Matrix]:
+        matrices: Dict[str, Matrix] = {}
+
+        print("\033[95mGetting matrices\033[0m")
+        for pbone in selected_pose_bones:
+            print(f"    {pbone.name}")
+            print(f"{pbone.matrix!r}")
+
+            if pbone.parent:
+                world_to_parent = pbone.parent.matrix.inverted_safe()
+            else:
+                world_to_parent = Matrix.Rotation(-math.radians(90), 4, "X")
+            matrices[pbone.name] = world_to_parent @ pbone.matrix
+
+        return matrices
+
+    def disable_constraints(self, selected_pose_bones) -> None:
+        print("Disabling constraints")
+        for pbone in selected_pose_bones:
+            for constraint in pbone.constraints:
+                print(f"    {pbone.name}: {constraint.name}")
+                constraint.mute = True
+
+    def set_matrices(self, pose_object, matrices: Dict[str, Matrix]) -> None:
+        print("Setting mone matrices")
+        for bone_name, matrix in matrices.items():
+            print(f"    {bone_name}")
+            pose_object.pose.bones[bone_name].matrix_basis = matrix
+
+
 class VIEW3D_PT_copy_matrix(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -253,6 +300,7 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         col = layout.column(align=True)
         col.operator("object.copy_matrix", text="Copy Transform")
         col.operator("object.paste_matrix", text="Paste Transform")
+        col.operator("pose.matrix_to_matrix_basis")
 
         if context.object:
             self.draw_evaluated_transform(context)
@@ -303,6 +351,7 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
 classes = (
     OBJECT_OT_copy_matrix,
     OBJECT_OT_paste_matrix,
+    POSE_OT_matrix_to_matrix_basis,
     VIEW3D_PT_copy_matrix,
 )
 register, unregister = bpy.utils.register_classes_factory(classes)
