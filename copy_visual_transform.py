@@ -263,19 +263,29 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         col = self.layout.column(align=False)
         col.label(text=label)
 
+        def nicenum(num: float) -> str:
+            if abs(num) < 1e-3:
+                return "-"
+            return f"{num:.3f}"
+
+        def nicescale(num: float) -> str:
+            if abs(1.0 - num) < 1e-3:
+                return "-"
+            return f"{num:.3f}"
+
         grid = col.grid_flow(row_major=True, columns=4, align=True)
         grid.label(text="T")
-        grid.label(text=f"{trans.x:.3}")
-        grid.label(text=f"{trans.y:.3}")
-        grid.label(text=f"{trans.z:.3}")
+        grid.label(text=nicenum(trans.x))
+        grid.label(text=nicenum(trans.y))
+        grid.label(text=nicenum(trans.z))
         grid.label(text="R")
-        grid.label(text=f"{rot.x:.3}")
-        grid.label(text=f"{rot.y:.3}")
-        grid.label(text=f"{rot.z:.3}")
+        grid.label(text=nicenum(rot.x))
+        grid.label(text=nicenum(rot.y))
+        grid.label(text=nicenum(rot.z))
         grid.label(text="S")
-        grid.label(text=f"{scale.x:.3}")
-        grid.label(text=f"{scale.y:.3}")
-        grid.label(text=f"{scale.z:.3}")
+        grid.label(text=nicescale(scale.x))
+        grid.label(text=nicescale(scale.y))
+        grid.label(text=nicescale(scale.z))
 
     def draw_evaluated_transform(self, context):
         depsgraph = context.evaluated_depsgraph_get()
