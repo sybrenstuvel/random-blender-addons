@@ -32,7 +32,7 @@ bl_info = {
     "support": "COMMUNITY",
 }
 
-from typing import Iterable, Optional, Set, Union
+from typing import Dict, Iterable, Optional, Set, Union
 
 import bpy
 from mathutils import Matrix
@@ -293,6 +293,11 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
 
         self.draw_decomposed_matrix("Evaluated Transform:", ob_eval.matrix_world)
         self.draw_decomposed_matrix("Parent Inverse:", ob_eval.matrix_parent_inverse)
+
+        if context.active_pose_bone:
+            bone = context.active_pose_bone
+            self.draw_decomposed_matrix(f"{bone.name} matrix:", bone.matrix)
+            self.draw_decomposed_matrix(f"{bone.name} matrix_basis:", bone.matrix_basis)
 
 
 classes = (
