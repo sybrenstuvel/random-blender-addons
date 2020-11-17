@@ -76,9 +76,14 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
             self.report({"ERROR"}, "No valid JSON on clipboard: %s" % ex)
             return {"CANCELLED"}
 
-        self._apply_matrices(bone_data, context.active_object)
+        num_bones_in_json = len(bone_data)
+        num_modified_bones = self._apply_matrices(bone_data, context.active_object)
 
-        self.report({"INFO"}, "Pose bone matrices pasted.")
+        self.report(
+            {"INFO"},
+            "%s of %s pose bone matrices pasted."
+            % (num_modified_bones, num_bones_in_json),
+        )
         return {"FINISHED"}
 
     def _parse_json(self, the_json: str) -> ClipboardData:
@@ -88,7 +93,7 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
 
     def _apply_matrices(
         self, bone_data: ClipboardData, arm_object: bpy.types.Object
-    ) -> None:
+    ) -> int:
         """
         Iterate over bones hierarchically, updating parents before children.
 
@@ -101,24 +106,32 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         bones = deque(bone for bone in pose.bones if not bone.parent)
 
         # Walk the pose bones breadth-first.
+        num_modified_bones = 0
         while bones:
             bone = bones.popleft()
-            self._apply_bone_matrix(bone_data, bone)
+            if self._apply_bone_matrix(bone_data, bone):
+                num_modified_bones += 1
             bones.extend(bone.children)
+
+        return num_modified_bones
 
     def _apply_bone_matrix(
         self,
         bone_data: ClipboardData,
         bone: bpy.types.PoseBone,
-    ) -> None:
-        """Apply matrix from the clipboard."""
+    ) -> bool:
+        """Apply matrix from the clipboard.
+
+        :return: True if applied, False if skipped.
+        """
 
         try:
             matrix_components = bone_data[bone.name]["matrix"]
         except KeyError:
-            return  # This bone is not included in the pose JSON.
+            return False  # This bone is not included in the pose JSON.
 
         bone.matrix = Matrix(matrix_components)
+        return True
 
 
 class VIEW3D_PT_pose_tools(Panel):
