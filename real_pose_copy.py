@@ -34,6 +34,7 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
     bl_description = (
         "Copies the matrices of the selected bones as JSON onto the clipboard"
     )
+    bl_options = {"REGISTER"}  # No undo available for copying to the clipboard
 
     @classmethod
     def poll(cls, context):
@@ -58,6 +59,7 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
     bl_description = (
         "Copies the matrices of the selected bones as JSON onto the clipboard"
     )
+    bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
