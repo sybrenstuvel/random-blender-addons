@@ -11,7 +11,7 @@ bl_info = {
     "name": "Real pose copy",
     "author": "Sybren A. Stüvel",
     "version": (1, 1),
-    "blender": (2, 80, 0),
+    "blender": (2, 91, 0),
     "location": "3D View Numerical Panel > Pose Tools",
     "category": "Animation",
 }
@@ -36,7 +36,6 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
         return context.mode == "POSE" and context.selected_pose_bones
 
     def execute(self, context):
-        context.scene.update()
         bone_data = defaultdict(dict)
         for bone in context.selected_pose_bones:
             # Convert matrix to list-of-tuples.
@@ -82,7 +81,6 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
                 pass  # This bone is not included in the pose JSON.
             else:
                 bone.matrix = Matrix(matrix_components)
-                context.scene.update()  # Required due to known issue in Blender.
 
             bones.extend(bone.children)
 
