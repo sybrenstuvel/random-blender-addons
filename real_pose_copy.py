@@ -18,10 +18,14 @@ bl_info = {
 
 from collections import defaultdict, deque
 import json
+from typing import Dict, List, Set
 
 import bpy
 from mathutils import Matrix
 from bpy.types import Menu, Panel, UIList
+
+# Mapping {"bone_name": {"matrix": [4 lists of 4 floats]}}
+ClipboardData = Dict[str, Dict[str, List[List[float]]]]
 
 
 class POSE_OT_copy_as_json(bpy.types.Operator):
@@ -36,10 +40,10 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
         return context.mode == "POSE" and context.selected_pose_bones
 
     def execute(self, context):
-        bone_data = defaultdict(dict)
+        bone_data: ClipboardData = defaultdict(dict)
         for bone in context.selected_pose_bones:
             # Convert matrix to list-of-tuples.
-            vals = [tuple(v) for v in bone.matrix]
+            vals = [list(v) for v in bone.matrix]
             bone_data[bone.name]["matrix"] = vals
 
         context.window_manager.clipboard = json.dumps(bone_data)
@@ -57,35 +61,62 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.mode == "POSE"
+        return (
+            context.mode == "POSE"
+            and context.active_object
+            and context.active_object.type == "ARMATURE"
+        )
 
     def execute(self, context):
-        # Parse the JSON
-        the_json = context.window_manager.clipboard
         try:
-            bone_data = json.loads(the_json)
+            bone_data = self._parse_json(context.window_manager.clipboard)
         except ValueError as ex:
             self.report({"ERROR"}, "No valid JSON on clipboard: %s" % ex)
             return {"CANCELLED"}
 
-        # Iterate over bones hierarchically, updating parents before children.
-        bones = deque(
-            bone for bone in context.active_object.pose.bones if not bone.parent
-        )
-        while bones:
-            bone = bones.popleft()
-
-            try:
-                matrix_components = bone_data[bone.name]["matrix"]
-            except KeyError:
-                pass  # This bone is not included in the pose JSON.
-            else:
-                bone.matrix = Matrix(matrix_components)
-
-            bones.extend(bone.children)
+        self._apply_matrices(bone_data, context.active_object)
 
         self.report({"INFO"}, "Pose bone matrices pasted.")
         return {"FINISHED"}
+
+    def _parse_json(self, the_json: str) -> ClipboardData:
+        bone_data = json.loads(the_json)
+        assert isinstance(bone_data, dict)
+        return bone_data
+
+    def _apply_matrices(
+        self, bone_data: ClipboardData, arm_object: bpy.types.Object
+    ) -> None:
+        """
+        Iterate over bones hierarchically, updating parents before children.
+
+        :return: the number of modified bones.
+        """
+
+        pose: bpy.types.Pose = arm_object.pose
+
+        # Collect all root bones.
+        bones = deque(bone for bone in pose.bones if not bone.parent)
+
+        # Walk the pose bones breadth-first.
+        while bones:
+            bone = bones.popleft()
+            self._apply_bone_matrix(bone_data, bone)
+            bones.extend(bone.children)
+
+    def _apply_bone_matrix(
+        self,
+        bone_data: ClipboardData,
+        bone: bpy.types.PoseBone,
+    ) -> None:
+        """Apply matrix from the clipboard."""
+
+        try:
+            matrix_components = bone_data[bone.name]["matrix"]
+        except KeyError:
+            return  # This bone is not included in the pose JSON.
+
+        bone.matrix = Matrix(matrix_components)
 
 
 class VIEW3D_PT_pose_tools(Panel):
