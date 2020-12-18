@@ -137,7 +137,7 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
 class VIEW3D_PT_pose_tools(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Clipboard"
+    bl_category = "Animation"
     bl_label = "Copy Pose"
 
     def draw(self, context):
