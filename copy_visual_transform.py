@@ -33,9 +33,10 @@ bl_info = {
 }
 
 import math
-from typing import Dict, Iterable, Optional, Set, Union
+from typing import Dict, Iterable, Optional, Set, Tuple, Union
 
 import bpy
+from bpy.types import Context, Object, Operator, Panel, PoseBone
 from mathutils import Matrix
 
 
@@ -46,7 +47,7 @@ class AutoKeying:
     """
 
     @classmethod
-    def keying_options(cls, context) -> Set[str]:
+    def keying_options(cls, context: Context) -> Set[str]:
         """Retrieve the general keyframing options from user preferences."""
 
         prefs = context.preferences
@@ -64,7 +65,7 @@ class AutoKeying:
         return options
 
     @classmethod
-    def autokeying_options(cls, context) -> Optional[Set[str]]:
+    def autokeying_options(cls, context: Context) -> Optional[Set[str]]:
         """Retrieve the Auto Keyframe options, or None if disabled."""
 
         ts = context.scene.tool_settings
@@ -86,7 +87,7 @@ class AutoKeying:
         return options
 
     @staticmethod
-    def get_4d_rotlock(bone: bpy.types.PoseBone) -> Iterable[bool]:
+    def get_4d_rotlock(bone: PoseBone) -> Iterable[bool]:
         "Retrieve the lock status for 4D rotation."
         if bone.lock_rotations_4d:
             return [bone.lock_rotation_w, *bone.lock_rotation]
@@ -95,7 +96,7 @@ class AutoKeying:
 
     @staticmethod
     def keyframe_channels(
-        target: Union[bpy.types.Object, bpy.types.PoseBone],
+        target: Union[Object, PoseBone],
         options: Set[str],
         data_path: str,
         group: str,
@@ -116,18 +117,18 @@ class AutoKeying:
     @classmethod
     def key_transformation(
         cls,
-        target: Union[bpy.types.Object, bpy.types.PoseBone],
+        target: Union[Object, PoseBone],
         options: Set[str],
     ) -> None:
         """Keyframe transformation properties, avoiding keying locked channels."""
 
-        is_bone = isinstance(target, bpy.types.PoseBone)
+        is_bone = isinstance(target, PoseBone)
         if is_bone:
             group = target.name
         else:
             group = "Object Transforms"
 
-        def keyframe(data_path, locks):
+        def keyframe(data_path: str, locks: Iterable[bool]) -> None:
             cls.keyframe_channels(target, options, data_path, group, locks)
 
         if not (is_bone and target.bone.use_connect):
@@ -144,7 +145,7 @@ class AutoKeying:
 
     @classmethod
     def autokey_transformation(
-        cls, context, target: Union[bpy.types.Object, bpy.types.PoseBone]
+        cls, context: Context, target: Union[Object, PoseBone]
     ) -> None:
         """Auto-key transformation properties."""
 
@@ -154,7 +155,7 @@ class AutoKeying:
         cls.key_transformation(target, options)
 
 
-def get_matrix(context):
+def get_matrix(context: Context) -> Matrix:
     bone = context.active_pose_bone
     if bone:
         # Convert matrix to world space
@@ -166,7 +167,7 @@ def get_matrix(context):
     return mat
 
 
-def set_matrix(context, mat):
+def set_matrix(context: Context, mat: Matrix) -> None:
     bone = context.active_pose_bone
     if bone:
         # Convert matrix to local space
@@ -178,7 +179,7 @@ def set_matrix(context, mat):
         AutoKeying.autokey_transformation(context, context.active_object)
 
 
-class OBJECT_OT_copy_matrix(bpy.types.Operator):
+class OBJECT_OT_copy_matrix(Operator):
     bl_idname = "object.copy_matrix"
     bl_label = "Copy matrix"
     bl_description = (
@@ -188,10 +189,10 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
     bl_options = {"REGISTER"}  # This operator cannot be un-done.
 
     @classmethod
-    def poll(cls, context) -> bool:
+    def poll(cls, context: Context) -> bool:
         return bool(context.active_pose_bone) or bool(context.active_object)
 
-    def execute(self, context) -> Set[str]:
+    def execute(self, context: Context) -> Set[str]:
         mat = get_matrix(context)
         rows = [f"            {tuple(row)!r}," for row in mat]
         as_string = "\n".join(rows)
@@ -199,7 +200,7 @@ class OBJECT_OT_copy_matrix(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class OBJECT_OT_paste_matrix(bpy.types.Operator):
+class OBJECT_OT_paste_matrix(Operator):
     bl_idname = "object.paste_matrix"
     bl_label = "Paste matrix"
     bl_description = (
@@ -209,7 +210,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
-    def poll(cls, context) -> bool:
+    def poll(cls, context: Context) -> bool:
         return bool(context.active_pose_bone) or bool(context.active_object)
 
     @staticmethod
@@ -226,7 +227,7 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         floats = tuple(tuple(float(item) for item in line.split()) for line in lines)
         return Matrix(floats)
 
-    def execute(self, context) -> Set[str]:
+    def execute(self, context: Context) -> Set[str]:
         clipboard = context.window_manager.clipboard
         if clipboard.startswith("Matrix"):
             mat = eval(clipboard, {}, {"Matrix": Matrix})
@@ -242,23 +243,25 @@ class OBJECT_OT_paste_matrix(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class POSE_OT_matrix_to_matrix_basis(bpy.types.Operator):
+class POSE_OT_matrix_to_matrix_basis(Operator):
     bl_idname = "pose.matrix_to_matrix_basis"
     bl_label = "Bake Selected Bones"
     bl_description = "Copy the evaluated transform to the local transform of selected pose bones, and disable constraints"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
-    def poll(cls, context) -> bool:
+    def poll(cls, context: Context) -> bool:
         return bool(context.selected_pose_bones)
 
-    def execute(self, context) -> Set[str]:
+    def execute(self, context: Context) -> Set[str]:
         matrices = self.matrices_to_bake(context.selected_pose_bones)
         self.disable_constraints(context.selected_pose_bones)
         self.set_matrices(context.pose_object, matrices)
         return {"FINISHED"}
 
-    def matrices_to_bake(self, selected_pose_bones) -> Dict[str, Matrix]:
+    def matrices_to_bake(
+        self, selected_pose_bones: Iterable[PoseBone]
+    ) -> Dict[str, Matrix]:
         matrices: Dict[str, Matrix] = {}
 
         print("\033[95mGetting matrices\033[0m")
@@ -274,27 +277,27 @@ class POSE_OT_matrix_to_matrix_basis(bpy.types.Operator):
 
         return matrices
 
-    def disable_constraints(self, selected_pose_bones) -> None:
+    def disable_constraints(self, selected_pose_bones: Iterable[PoseBone]) -> None:
         print("Disabling constraints")
         for pbone in selected_pose_bones:
             for constraint in pbone.constraints:
                 print(f"    {pbone.name}: {constraint.name}")
                 constraint.mute = True
 
-    def set_matrices(self, pose_object, matrices: Dict[str, Matrix]) -> None:
+    def set_matrices(self, pose_object: Object, matrices: Dict[str, Matrix]) -> None:
         print("Setting mone matrices")
         for bone_name, matrix in matrices.items():
             print(f"    {bone_name}")
             pose_object.pose.bones[bone_name].matrix_basis = matrix
 
 
-class VIEW3D_PT_copy_matrix(bpy.types.Panel):
+class VIEW3D_PT_copy_matrix(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Clipboard"
     bl_label = "Copy Matrix"
 
-    def draw(self, context) -> None:
+    def draw(self, context: Context) -> None:
         layout = self.layout
 
         col = layout.column(align=True)
@@ -304,6 +307,19 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
 
         if context.object:
             self.draw_evaluated_transform(context)
+            self.draw_rotations(context)
+
+    @staticmethod
+    def nicenum(num: float) -> str:
+        if abs(num) < 1e-3:
+            return "-"
+        return f"{num:.3f}"
+
+    @staticmethod
+    def nicescale(num: float) -> str:
+        if abs(1.0 - num) < 1e-3:
+            return "-"
+        return f"{num:.3f}"
 
     def draw_decomposed_matrix(self, label: str, matrix: Matrix) -> None:
         (trans, rot, scale) = matrix.decompose()
@@ -311,41 +327,61 @@ class VIEW3D_PT_copy_matrix(bpy.types.Panel):
         col = self.layout.column(align=False)
         col.label(text=label)
 
-        def nicenum(num: float) -> str:
-            if abs(num) < 1e-3:
-                return "-"
-            return f"{num:.3f}"
-
-        def nicescale(num: float) -> str:
-            if abs(1.0 - num) < 1e-3:
-                return "-"
-            return f"{num:.3f}"
-
         grid = col.grid_flow(row_major=True, columns=4, align=True)
         grid.label(text="T")
-        grid.label(text=nicenum(trans.x))
-        grid.label(text=nicenum(trans.y))
-        grid.label(text=nicenum(trans.z))
+        grid.label(text=self.nicenum(trans.x))
+        grid.label(text=self.nicenum(trans.y))
+        grid.label(text=self.nicenum(trans.z))
         grid.label(text="R")
-        grid.label(text=nicenum(rot.x))
-        grid.label(text=nicenum(rot.y))
-        grid.label(text=nicenum(rot.z))
+        grid.label(text=self.nicenum(rot.x))
+        grid.label(text=self.nicenum(rot.y))
+        grid.label(text=self.nicenum(rot.z))
         grid.label(text="S")
-        grid.label(text=nicescale(scale.x))
-        grid.label(text=nicescale(scale.y))
-        grid.label(text=nicescale(scale.z))
+        grid.label(text=self.nicescale(scale.x))
+        grid.label(text=self.nicescale(scale.y))
+        grid.label(text=self.nicescale(scale.z))
 
-    def draw_evaluated_transform(self, context):
+    def draw_evaluated_transform(self, context: Context) -> None:
         depsgraph = context.evaluated_depsgraph_get()
         ob_eval = context.object.evaluated_get(depsgraph)
 
-        self.draw_decomposed_matrix("Evaluated Transform:", ob_eval.matrix_world)
-        self.draw_decomposed_matrix("Parent Inverse:", ob_eval.matrix_parent_inverse)
+        if ob_eval.mode == "OBJECT":
+            self.draw_decomposed_matrix("Evaluated Transform:", ob_eval.matrix_world)
+            self.draw_decomposed_matrix(
+                "Parent Inverse:", ob_eval.matrix_parent_inverse
+            )
 
         if context.active_pose_bone:
             bone = context.active_pose_bone
             self.draw_decomposed_matrix(f"{bone.name} matrix:", bone.matrix)
             self.draw_decomposed_matrix(f"{bone.name} matrix_basis:", bone.matrix_basis)
+
+    def draw_rotations(self, context: Context) -> None:
+        ob = context.object
+
+        col = self.layout.column(align=False)
+        col.label(text="Rotation")
+
+        grid = col.grid_flow(row_major=True, columns=5, align=True)
+        grid.label(text="E")
+        grid.label(text="")
+        grid.label(text=self.nicenum(ob.rotation_euler.x))
+        grid.label(text=self.nicenum(ob.rotation_euler.y))
+        grid.label(text=self.nicenum(ob.rotation_euler.z))
+
+        q = ob.rotation_euler.to_quaternion()
+        grid.label(text="Q")
+        grid.label(text=self.nicenum(q.w))
+        grid.label(text=self.nicenum(q.x))
+        grid.label(text=self.nicenum(q.y))
+        grid.label(text=self.nicenum(q.z))
+
+        axis, angle = q.to_axis_angle()
+        grid.label(text="AA")
+        grid.label(text=self.nicenum(math.degrees(angle)))
+        grid.label(text=self.nicenum(axis.x))
+        grid.label(text=self.nicenum(axis.y))
+        grid.label(text=self.nicenum(axis.z))
 
 
 classes = (
