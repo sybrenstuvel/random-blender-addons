@@ -179,9 +179,9 @@ def set_matrix(context: Context, mat: Matrix) -> None:
         AutoKeying.autokey_transformation(context, context.active_object)
 
 
-class OBJECT_OT_copy_matrix(Operator):
-    bl_idname = "object.copy_matrix"
-    bl_label = "Copy matrix"
+class OBJECT_OT_copy_visual_transform(Operator):
+    bl_idname = "object.copy_visual_transform"
+    bl_label = "Copy Visual Transform"
     bl_description = (
         "Copies the matrix of the currently active object or pose bone "
         "to the clipboard. Uses world-space matrices"
@@ -200,11 +200,11 @@ class OBJECT_OT_copy_matrix(Operator):
         return {"FINISHED"}
 
 
-class OBJECT_OT_paste_matrix(Operator):
-    bl_idname = "object.paste_matrix"
-    bl_label = "Paste matrix"
+class OBJECT_OT_paste_transform(Operator):
+    bl_idname = "object.paste_transform"
+    bl_label = "Paste Transform"
     bl_description = (
-        "Pastes the matrix of the clipboard to the currently active pose bone "
+        "Pastes the matrix from the clipboard to the currently active pose bone "
         "or object. Uses world-space matrices"
     )
     bl_options = {"REGISTER", "UNDO"}
@@ -301,8 +301,8 @@ class VIEW3D_PT_copy_matrix(Panel):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.operator("object.copy_matrix", text="Copy Transform")
-        col.operator("object.paste_matrix", text="Paste Transform")
+        col.operator("object.copy_visual_transform")
+        col.operator("object.paste_transform")
         col.operator("pose.matrix_to_matrix_basis")
 
         if context.object:
@@ -385,8 +385,8 @@ class VIEW3D_PT_copy_matrix(Panel):
 
 
 classes = (
-    OBJECT_OT_copy_matrix,
-    OBJECT_OT_paste_matrix,
+    OBJECT_OT_copy_visual_transform,
+    OBJECT_OT_paste_transform,
     POSE_OT_matrix_to_matrix_basis,
     VIEW3D_PT_copy_matrix,
 )
