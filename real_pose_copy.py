@@ -29,8 +29,10 @@ from bpy.types import Menu, Panel, UIList
 
 # Matrix as 4 tuples of 4 floats, or as string 'I' for identity.
 JSONMatrix = Union[Tuple[Tuple[float]], str]
-# Mapping {"bone_name": {"matrix": JSONMatrix, "matrix_basis": JSONMatrix}}
-ClipboardData = Dict[str, Dict[str, JSONMatrix]]
+# {"matrix": JSONMatrix, "matrix_basis": JSONMatrix}
+BoneData = Dict[str, JSONMatrix]
+# Mapping {"bone_name": BoneData}
+ClipboardData = Dict[str, BoneData]
 
 
 class JSONEncoder(json.encoder.JSONEncoder):
@@ -131,7 +133,9 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
             return {"CANCELLED"}
 
         num_bones_in_json = len(bone_data)
-        num_modified_bones = self._apply_matrices(bone_data, context.active_object)
+        num_modified_bones = self._apply_matrices(
+            bone_data, context.active_object, context.active_pose_bone
+        )
 
         self.report(
             {"INFO"},
@@ -146,7 +150,10 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         return bone_data
 
     def _apply_matrices(
-        self, bone_data: ClipboardData, arm_object: bpy.types.Object
+        self,
+        clipboard_data: ClipboardData,
+        arm_object: bpy.types.Object,
+        active_pose_bone: bpy.types.PoseBone,
     ) -> int:
         """
         Iterate over bones hierarchically, updating parents before children.
@@ -159,6 +166,13 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
             "WORLD": self._apply_bone_matrix_world,
         }[self.target]
 
+        if len(clipboard_data) == 1:
+            # Only one bone is pasted. Just paste it to the active pose bone, ignoring the name.
+            bone_data = tuple(clipboard_data.values())[0]
+            if apply_func(bone_data, active_pose_bone):
+                return 1
+            return 0
+
         # Collect all root bones.
         pose: bpy.types.Pose = arm_object.pose
         bones = deque(bone for bone in pose.bones if not bone.parent)
@@ -167,15 +181,22 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         num_modified_bones = 0
         while bones:
             bone = bones.popleft()
-            if apply_func(bone_data, bone):
-                num_modified_bones += 1
+
+            try:
+                bone_data = clipboard_data[bone.name]
+            except KeyError:
+                pass
+            else:
+                if apply_func(bone_data, bone):
+                    num_modified_bones += 1
+
             bones.extend(bone.children)
 
         return num_modified_bones
 
     def _apply_bone_matrix_local(
         self,
-        bone_data: ClipboardData,
+        bone_data: BoneData,
         bone: bpy.types.PoseBone,
     ) -> bool:
         """Apply matrix_basis from the clipboard.
@@ -184,16 +205,16 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         """
 
         try:
-            json_value = bone_data[bone.name]["matrix_basis"]
+            json_value = bone_data["matrix_basis"]
         except KeyError:
-            return False  # This bone is not included in the pose JSON.
+            return False
 
         bone.matrix_basis = JSONEncoder.decode_matrix(json_value)
         return True
 
     def _apply_bone_matrix_world(
         self,
-        bone_data: ClipboardData,
+        bone_data: BoneData,
         bone: bpy.types.PoseBone,
     ) -> bool:
         """Apply matrix from the clipboard.
@@ -202,9 +223,9 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         """
 
         try:
-            json_value = bone_data[bone.name]["matrix"]
+            json_value = bone_data["matrix"]
         except KeyError:
-            return False  # This bone is not included in the pose JSON.
+            return False
 
         bone.matrix = JSONEncoder.decode_matrix(json_value)
         return True
