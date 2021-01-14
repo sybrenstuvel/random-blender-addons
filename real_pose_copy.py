@@ -16,8 +16,10 @@ bl_info = {
     "category": "Animation",
 }
 
-from collections import defaultdict, deque
+import base64
+import bz2
 import json
+from collections import defaultdict, deque
 from typing import Any, Dict, List, Set, Tuple, Union
 
 import bpy
@@ -48,6 +50,21 @@ class JSONEncoder(json.encoder.JSONEncoder):
             return Matrix.Identity(4)
         return Matrix(json_value)
 
+    @staticmethod
+    def compress(json_data: str) -> str:
+        """Compress the JSON data to roughly 1/2 or 1/3 the original size."""
+        data = base64.b64encode(bz2.compress(json_data.encode(), 9))
+        return "POSE-" + data.decode("ASCII") + "-POSE"
+
+    @staticmethod
+    def decompress(clipboard_data: str) -> str:
+        """Decompress the clipboard to a JSON string."""
+
+        # Strip off the "POSE-" prefix and suffix. The poll() function already
+        # checks the prefix, and the suffix is just assumed to be there.
+        compressed = clipboard_data[5:-5]
+        return bz2.decompress(base64.b64decode(compressed))
+
 
 class POSE_OT_copy_as_json(bpy.types.Operator):
     bl_idname = "pose.copy_as_json"
@@ -67,7 +84,8 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
             bone_data[bone.name]["matrix"] = bone.matrix
             bone_data[bone.name]["matrix_basis"] = bone.matrix_basis
 
-        context.window_manager.clipboard = json.dumps(bone_data, cls=JSONEncoder)
+        json_data = json.dumps(bone_data, cls=JSONEncoder)
+        context.window_manager.clipboard = JSONEncoder.compress(json_data)
         self.report({"INFO"}, "Selected pose bone matrices copied.")
 
         return {"FINISHED"}
@@ -99,11 +117,13 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
             context.mode == "POSE"
             and context.active_object
             and context.active_object.type == "ARMATURE"
+            and context.window_manager.clipboard.startswith("POSE-")
         )
 
     def execute(self, context):
         try:
-            bone_data = self._parse_json(context.window_manager.clipboard)
+            json_data = JSONEncoder.decompress(context.window_manager.clipboard)
+            bone_data = self._parse_json(json_data)
         except ValueError as ex:
             self.report({"ERROR"}, "No valid JSON on clipboard: %s" % ex)
             return {"CANCELLED"}
