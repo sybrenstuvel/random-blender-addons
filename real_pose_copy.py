@@ -20,7 +20,7 @@ import base64
 import bz2
 import json
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union, cast
 
 import bpy
 from mathutils import Matrix
@@ -42,7 +42,8 @@ class JSONEncoder(json.encoder.JSONEncoder):
     def encode_matrix(self, matrix: Matrix) -> JSONMatrix:
         if matrix == Matrix.Identity(4):
             return "I"
-        return tuple(tuple(row) for row in matrix)
+        json_matrix = tuple(tuple(row) for row in matrix)
+        return cast(JSONMatrix, json_matrix)
 
     @staticmethod
     def decode_matrix(json_value: JSONMatrix) -> Matrix:
@@ -63,7 +64,8 @@ class JSONEncoder(json.encoder.JSONEncoder):
         # Strip off the "POSE-" prefix and suffix. The poll() function already
         # checks the prefix, and the suffix is just assumed to be there.
         compressed = clipboard_data[5:-5]
-        return bz2.decompress(base64.b64decode(compressed))
+        decompressed = bz2.decompress(base64.b64decode(compressed))
+        return decompressed.decode()
 
 
 class POSE_OT_copy_as_json(bpy.types.Operator):
@@ -99,7 +101,7 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
     )
     bl_options = {"REGISTER", "UNDO"}
 
-    target = EnumProperty(
+    target: EnumProperty(  # type: ignore
         name="Target",
         items=[
             ("LOCAL", "Local Matrix", "Copy the local rot/loc/scale as matrix"),
