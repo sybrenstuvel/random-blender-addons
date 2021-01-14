@@ -10,7 +10,7 @@ by name.
 bl_info = {
     "name": "Real pose copy",
     "author": "Sybren A. Stüvel",
-    "version": (1, 1),
+    "version": (1, 2),
     "blender": (2, 91, 0),
     "location": "3D View Numerical Panel > Pose Tools",
     "category": "Animation",
