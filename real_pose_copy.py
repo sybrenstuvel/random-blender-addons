@@ -72,10 +72,8 @@ class JSONEncoder(json.encoder.JSONEncoder):
 
 class POSE_OT_copy_as_json(bpy.types.Operator):
     bl_idname = "pose.copy_as_json"
-    bl_label = "Copy pose as JSON"
-    bl_description = (
-        "Copies the matrices of the selected bones as JSON onto the clipboard"
-    )
+    bl_label = "Copy Pose"
+    bl_description = "Copies the matrices of the selected bones as compressed JSON onto the clipboard"
     bl_options = {"REGISTER"}  # No undo available for copying to the clipboard
 
     @classmethod
@@ -97,10 +95,8 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
 
 class POSE_OT_paste_from_json(bpy.types.Operator):
     bl_idname = "pose.paste_from_json"
-    bl_label = "Paste pose from JSON"
-    bl_description = (
-        "Copies the matrices of the selected bones as JSON onto the clipboard"
-    )
+    bl_label = "Paste Pose"
+    bl_description = "Copies the matrices of the selected bones as compressed JSON onto the clipboard"
     bl_options = {"REGISTER", "UNDO"}
 
     target: EnumProperty(  # type: ignore
@@ -241,12 +237,12 @@ class VIEW3D_PT_pose_tools(Panel):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.operator("pose.copy_as_json", text="Copy as JSON")
+        col.operator("pose.copy_as_json", text="Copy as JSON", icon="COPYDOWN")
         col.operator(
-            "pose.paste_from_json", text="Paste local from JSON"
+            "pose.paste_from_json", text="Paste Local", icon="PASTEDOWN"
         ).target = "LOCAL"
         col.operator(
-            "pose.paste_from_json", text="Paste world from JSON"
+            "pose.paste_from_json", text="Paste World", icon="PASTEDOWN"
         ).target = "WORLD"
 
 
