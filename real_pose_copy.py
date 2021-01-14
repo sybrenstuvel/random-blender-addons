@@ -18,14 +18,35 @@ bl_info = {
 
 from collections import defaultdict, deque
 import json
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import bpy
 from mathutils import Matrix
+from bpy.props import EnumProperty
 from bpy.types import Menu, Panel, UIList
 
-# Mapping {"bone_name": {"matrix": [4 lists of 4 floats]}}
-ClipboardData = Dict[str, Dict[str, List[List[float]]]]
+# Matrix as 4 tuples of 4 floats, or as string 'I' for identity.
+JSONMatrix = Union[Tuple[Tuple[float]], str]
+# Mapping {"bone_name": {"matrix": JSONMatrix, "matrix_basis": JSONMatrix}}
+ClipboardData = Dict[str, Dict[str, JSONMatrix]]
+
+
+class JSONEncoder(json.encoder.JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Matrix):
+            return self.encode_matrix(o)
+        return super().default(o)
+
+    def encode_matrix(self, matrix: Matrix) -> JSONMatrix:
+        if matrix == Matrix.Identity(4):
+            return "I"
+        return tuple(tuple(row) for row in matrix)
+
+    @staticmethod
+    def decode_matrix(json_value: JSONMatrix) -> Matrix:
+        if json_value == "I":
+            return Matrix.Identity(4)
+        return Matrix(json_value)
 
 
 class POSE_OT_copy_as_json(bpy.types.Operator):
@@ -43,11 +64,10 @@ class POSE_OT_copy_as_json(bpy.types.Operator):
     def execute(self, context):
         bone_data: ClipboardData = defaultdict(dict)
         for bone in context.selected_pose_bones:
-            # Convert matrix to list-of-tuples.
-            vals = [list(v) for v in bone.matrix]
-            bone_data[bone.name]["matrix"] = vals
+            bone_data[bone.name]["matrix"] = bone.matrix
+            bone_data[bone.name]["matrix_basis"] = bone.matrix_basis
 
-        context.window_manager.clipboard = json.dumps(bone_data)
+        context.window_manager.clipboard = json.dumps(bone_data, cls=JSONEncoder)
         self.report({"INFO"}, "Selected pose bone matrices copied.")
 
         return {"FINISHED"}
@@ -60,6 +80,18 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         "Copies the matrices of the selected bones as JSON onto the clipboard"
     )
     bl_options = {"REGISTER", "UNDO"}
+
+    target = EnumProperty(
+        name="Target",
+        items=[
+            ("LOCAL", "Local Matrix", "Copy the local rot/loc/scale as matrix"),
+            (
+                "WORLD",
+                "World Matrix",
+                "Copy-pasting can still change the pose when constraints are in use",
+            ),
+        ],
+    )
 
     @classmethod
     def poll(cls, context):
@@ -100,22 +132,44 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         :return: the number of modified bones.
         """
 
-        pose: bpy.types.Pose = arm_object.pose
+        apply_func = {
+            "LOCAL": self._apply_bone_matrix_local,
+            "WORLD": self._apply_bone_matrix_world,
+        }[self.target]
 
         # Collect all root bones.
+        pose: bpy.types.Pose = arm_object.pose
         bones = deque(bone for bone in pose.bones if not bone.parent)
 
         # Walk the pose bones breadth-first.
         num_modified_bones = 0
         while bones:
             bone = bones.popleft()
-            if self._apply_bone_matrix(bone_data, bone):
+            if apply_func(bone_data, bone):
                 num_modified_bones += 1
             bones.extend(bone.children)
 
         return num_modified_bones
 
-    def _apply_bone_matrix(
+    def _apply_bone_matrix_local(
+        self,
+        bone_data: ClipboardData,
+        bone: bpy.types.PoseBone,
+    ) -> bool:
+        """Apply matrix_basis from the clipboard.
+
+        :return: True if applied, False if skipped.
+        """
+
+        try:
+            json_value = bone_data[bone.name]["matrix_basis"]
+        except KeyError:
+            return False  # This bone is not included in the pose JSON.
+
+        bone.matrix_basis = JSONEncoder.decode_matrix(json_value)
+        return True
+
+    def _apply_bone_matrix_world(
         self,
         bone_data: ClipboardData,
         bone: bpy.types.PoseBone,
@@ -126,11 +180,11 @@ class POSE_OT_paste_from_json(bpy.types.Operator):
         """
 
         try:
-            matrix_components = bone_data[bone.name]["matrix"]
+            json_value = bone_data[bone.name]["matrix"]
         except KeyError:
             return False  # This bone is not included in the pose JSON.
 
-        bone.matrix = Matrix(matrix_components)
+        bone.matrix = JSONEncoder.decode_matrix(json_value)
         return True
 
 
@@ -145,7 +199,12 @@ class VIEW3D_PT_pose_tools(Panel):
 
         col = layout.column(align=True)
         col.operator("pose.copy_as_json", text="Copy as JSON")
-        col.operator("pose.paste_from_json", text="Paste from JSON")
+        col.operator(
+            "pose.paste_from_json", text="Paste local from JSON"
+        ).target = "LOCAL"
+        col.operator(
+            "pose.paste_from_json", text="Paste world from JSON"
+        ).target = "WORLD"
 
 
 classes = (
