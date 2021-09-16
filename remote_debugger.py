@@ -15,18 +15,16 @@ http://code.blender.org/2015/10/debugging-python-code-with-pycharm/
 bl_info = {
     'name': 'Remote debugger',
     'author': 'Sybren A. Stüvel',
-    'version': (0, 4, 1),
+    'version': (0, 4, 2),
     'blender': (2, 80, 0),
     'location': 'Press [Space], search for "debugger"',
     'category': 'Development',
-    'warning': 'removed convert_properties decorator as proposed by mk-relax on Aug 4'
 }
 
 import bpy
 import os.path
 from bpy.types import AddonPreferences
 from bpy.props import StringProperty
-
 
 # Get references to all property definition functions in bpy.props,
 # so that they can be used to replace 'x = IntProperty()' to 'x: IntProperty()'
@@ -36,44 +34,6 @@ __all_prop_funcs = {
     for propname in dir(bpy.props)
     if propname.endswith('Property')
 }
-
-# def convert_properties(class_):
-#     """Class decorator to avoid warnings in Blender 2.80+
-#
-#     This decorator replaces property definitions like this:
-#
-#         someprop = bpy.props.IntProperty()
-#
-#     to annotations, as introduced in Blender 2.80:
-#
-#         someprop: bpy.props.IntProperty()
-#
-#     No-op if running on Blender 2.79 or older.
-#     """
-#
-#     if bpy.app.version < (2, 80):
-#         return class_
-#
-#     if not hasattr(class_, '__annotations__'):
-#         class_.__annotations__ = {}
-#
-#     attrs_to_delete = []
-#     for name, value in class_.__dict__.items():
-#         if not isinstance(value, tuple) or len(value) != 2:
-#             continue
-#
-#         prop_func, kwargs = value
-#         if prop_func not in __all_prop_funcs:
-#             continue
-#
-#         # This is a property definition, replace it with annotation.
-#         attrs_to_delete.append(name)
-#         class_.__annotations__[name] = value
-#
-#     for attr_name in attrs_to_delete:
-#         delattr(class_, attr_name)
-#
-#     return class_
 
 
 def addon_preferences(context):
@@ -132,7 +92,7 @@ class DEBUG_OT_connect_debugger_pycharm(bpy.types.Operator):
 
         import pydevd_pycharm
         pydevd_pycharm.settrace('localhost', port=1090, stdoutToServer=True, stderrToServer=True,
-                        suspend=False)
+                                suspend=False)
 
         return {'FINISHED'}
 
