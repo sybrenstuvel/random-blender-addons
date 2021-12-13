@@ -179,6 +179,57 @@ def set_matrix(context: Context, mat: Matrix) -> None:
         AutoKeying.autokey_transformation(context, context.active_object)
 
 
+def selected_keyframes(context: Context) -> Iterable[float]:
+    """Return the list of frame numbers that have a selected key.
+
+    Only keys on the active bone/object are considered.
+    """
+    bone = context.active_pose_bone
+    if bone:
+        return selected_keyframes_for_bone(context.active_object, bone)
+    return selected_keyframes_for_object(context.active_object)
+
+
+def selected_keyframes_for_bone(object: Object, bone: PoseBone) -> Iterable[float]:
+    """Return the list of frame numbers that have a selected key.
+
+    Only keys on the given pose bone are considered.
+    """
+    return selected_keyframes_in_action(object, f'pose.bones["{bone.name}"].')
+
+
+def selected_keyframes_for_object(object: Object) -> Iterable[float]:
+    """Return the list of frame numbers that have a selected key.
+
+    Only keys on the given object are considered.
+    """
+    return selected_keyframes_in_action(object, "")
+
+
+def selected_keyframes_in_action(
+    object: Object, rna_path_prefix: str
+) -> Iterable[float]:
+    """Return the list of frame numbers that have a selected key.
+
+    Only keys on the given object's Action on FCurves starting with rna_path_prefix are considered.
+    """
+
+    action = object.animation_data and object.animation_data.action
+    if action is None:
+        return []
+
+    keyframes = set()
+    for fcurve in action.fcurves:
+        if not fcurve.data_path.startswith(rna_path_prefix):
+            continue
+
+        for kp in fcurve.keyframe_points:
+            if not kp.select_control_point:
+                continue
+            keyframes.add(kp.co.x)
+    return sorted(keyframes)
+
+
 class OBJECT_OT_copy_visual_transform(Operator):
     bl_idname = "object.copy_visual_transform"
     bl_label = "Copy Visual Transform"
@@ -186,7 +237,8 @@ class OBJECT_OT_copy_visual_transform(Operator):
         "Copies the matrix of the currently active object or pose bone "
         "to the clipboard. Uses world-space matrices"
     )
-    bl_options = {"REGISTER"}  # This operator cannot be un-done.
+    # This operator cannot be un-done because it manipulates data outside Blender.
+    bl_options = {"REGISTER"}
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -208,6 +260,24 @@ class OBJECT_OT_paste_transform(Operator):
         "or object. Uses world-space matrices"
     )
     bl_options = {"REGISTER", "UNDO"}
+
+    _method_items = [
+        (
+            "CURRENT",
+            "Current Transform",
+            "Paste onto the current values only, only manipulating the animation data if auto-keying is enabled",
+        ),
+        (
+            "EXISTING_KEYS",
+            "Selected Keys",
+            "Paste onto frames that have a selected key, potentially creating new keys on those frames",
+        ),
+    ]
+    method: bpy.props.EnumProperty(
+        items=_method_items,
+        name="Paste Method",
+        description="Update the current transform, selected keyframes, or even create new keys",
+    )
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -238,8 +308,32 @@ class OBJECT_OT_paste_transform(Operator):
             self.report({"ERROR"}, "Clipboard does not contain a valid matrix.")
             return {"CANCELLED"}
 
-        set_matrix(context, mat)
+        applicator = {
+            "CURRENT": self._apply_current,
+            "EXISTING_KEYS": self._apply_existing_keys,
+        }[self.method]
+        return applicator(context, mat)
 
+    @staticmethod
+    def _apply_current(context: Context, matrix: Matrix) -> set[str]:
+        set_matrix(context, matrix)
+        return {"FINISHED"}
+
+    def _apply_existing_keys(self, context: Context, matrix: Matrix) -> set[str]:
+
+        if not context.scene.tool_settings.use_keyframe_insert_auto:
+            self.report({"ERROR"}, "This mode requires auto-keying to work properly")
+            return {"CANCELLED"}
+
+        frame_numbers = selected_keyframes(context)
+
+        current_frame = context.scene.frame_current_final
+        try:
+            for frame in frame_numbers:
+                context.scene.frame_set(int(frame), subframe=frame % 1.0)
+                set_matrix(context, matrix)
+        finally:
+            context.scene.frame_set(int(current_frame), subframe=current_frame % 1.0)
         return {"FINISHED"}
 
 
