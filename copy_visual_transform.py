@@ -17,13 +17,15 @@
 # ======================= END GPL LICENSE BLOCK ========================
 
 """
-Copy Visual Transform
+Copy Global Transform
 
 Simple add-on for copying world-space transforms.
+
+It's called "global" to avoid confusion with the Blender World data-block.
 """
 
 bl_info = {
-    "name": "Copy Visual Transform",
+    "name": "Copy Global Transform",
     "author": "Sybren A. Stüvel",
     "version": (1, 4),
     "blender": (2, 91, 0),
@@ -225,9 +227,9 @@ def _selected_keyframes_in_action(object: Object, rna_path_prefix: str) -> Itera
     return sorted(keyframes)
 
 
-class OBJECT_OT_copy_visual_transform(Operator):
-    bl_idname = "object.copy_visual_transform"
-    bl_label = "Copy Visual Transform"
+class OBJECT_OT_copy_global_transform(Operator):
+    bl_idname = "object.copy_global_transform"
+    bl_label = "Copy Global Transform"
     bl_description = (
         "Copies the matrix of the currently active object or pose bone to the clipboard. Uses world-space matrices"
     )
@@ -248,7 +250,7 @@ class OBJECT_OT_copy_visual_transform(Operator):
 
 class OBJECT_OT_paste_transform(Operator):
     bl_idname = "object.paste_transform"
-    bl_label = "Paste Transform"
+    bl_label = "Paste Global Transform"
     bl_description = (
         "Pastes the matrix from the clipboard to the currently active pose bone or object. Uses world-space matrices"
     )
@@ -381,20 +383,21 @@ class OBJECT_OT_paste_transform(Operator):
         return {'FINISHED'}
 
 
-class VIEW3D_PT_copy_visual_transform(Panel):
+class VIEW3D_PT_copy_global_transform(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Animation"
-    bl_label = "Visual Transform"
+    bl_label = "Global Transform"
 
     def draw(self, context: Context) -> None:
         layout = self.layout
 
-        col = layout.column(align=True)
-        col.operator("object.copy_visual_transform", icon='COPYDOWN')
-        col.operator("object.paste_transform", icon='PASTEDOWN').method = 'CURRENT'
+        # No need to put "Global Transform" in the operator text, given that it's already in the panel title.
+        layout.operator("object.copy_global_transform", text="Copy", icon='COPYDOWN')
 
-        wants_autokey_col = col.column(align=True)
+        paste_col = layout.column(align=True)
+        paste_col.operator("object.paste_transform", text="Paste", icon='PASTEDOWN').method = 'CURRENT'
+        wants_autokey_col = paste_col.column(align=True)
         has_autokey = context.scene.tool_settings.use_keyframe_insert_auto
         wants_autokey_col.enabled = has_autokey
         if not has_autokey:
@@ -402,7 +405,7 @@ class VIEW3D_PT_copy_visual_transform(Panel):
 
         wants_autokey_col.operator(
             "object.paste_transform",
-            text="Paste on Selected Keys",
+            text="Paste to Selected Keys",
             icon='PASTEDOWN',
         ).method = 'EXISTING_KEYS'
         wants_autokey_col.operator(
@@ -429,9 +432,9 @@ def _refresh_3d_panels():
 
 
 classes = (
-    OBJECT_OT_copy_visual_transform,
+    OBJECT_OT_copy_global_transform,
     OBJECT_OT_paste_transform,
-    VIEW3D_PT_copy_visual_transform,
+    VIEW3D_PT_copy_global_transform,
 )
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 
