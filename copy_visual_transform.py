@@ -314,17 +314,17 @@ class OBJECT_OT_paste_transform(Operator):
             return {"CANCELLED"}
 
         applicator = {
-            "CURRENT": self._apply_current,
-            "EXISTING_KEYS": self._apply_existing_keys,
+            "CURRENT": self._paste_current,
+            "EXISTING_KEYS": self._paste_existing_keys,
         }[self.method]
         return applicator(context, mat)
 
     @staticmethod
-    def _apply_current(context: Context, matrix: Matrix) -> set[str]:
+    def _paste_current(context: Context, matrix: Matrix) -> set[str]:
         set_matrix(context, matrix)
         return {"FINISHED"}
 
-    def _apply_existing_keys(self, context: Context, matrix: Matrix) -> set[str]:
+    def _paste_existing_keys(self, context: Context, matrix: Matrix) -> set[str]:
 
         if not context.scene.tool_settings.use_keyframe_insert_auto:
             self.report({"ERROR"}, "This mode requires auto-keying to work properly")
