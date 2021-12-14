@@ -31,7 +31,7 @@ bl_info = {
     "blender": (2, 91, 0),
     "location": "N-panel in the 3D Viewport",
     "category": "Animation",
-    "support": "COMMUNITY",
+    "support": 'COMMUNITY',
 }
 
 from typing import Iterable, Optional, Union, Any
@@ -56,13 +56,13 @@ class AutoKeying:
         options = set()
 
         if prefs.edit.use_visual_keying:
-            options.add("INSERTKEY_VISUAL")
+            options.add('INSERTKEY_VISUAL')
         if prefs.edit.use_keyframe_insert_needed:
-            options.add("INSERTKEY_NEEDED")
+            options.add('INSERTKEY_NEEDED')
         if prefs.edit.use_insertkey_xyz_to_rgb:
-            options.add("INSERTKEY_XYZ_TO_RGB")
+            options.add('INSERTKEY_XYZ_TO_RGB')
         if ts.use_keyframe_cycle_aware:
-            options.add("INSERTKEY_CYCLE_AWARE")
+            options.add('INSERTKEY_CYCLE_AWARE')
         return options
 
     @classmethod
@@ -135,9 +135,9 @@ class AutoKeying:
         if not (is_bone and target.bone.use_connect):
             keyframe("location", target.lock_location)
 
-        if target.rotation_mode == "QUATERNION":
+        if target.rotation_mode == 'QUATERNION':
             keyframe("rotation_quaternion", cls.get_4d_rotlock(target))
-        elif target.rotation_mode == "AXIS_ANGLE":
+        elif target.rotation_mode == 'AXIS_ANGLE':
             keyframe("rotation_axis_angle", cls.get_4d_rotlock(target))
         else:
             keyframe("rotation_euler", target.lock_rotation)
@@ -322,9 +322,9 @@ class OBJECT_OT_paste_transform(Operator):
             return {'CANCELLED'}
 
         applicator = {
-            "CURRENT": self._paste_current,
-            "EXISTING_KEYS": self._paste_existing_keys,
-            "BAKE": self._paste_bake,
+            'CURRENT': self._paste_current,
+            'EXISTING_KEYS': self._paste_existing_keys,
+            'BAKE': self._paste_bake,
         }[self.method]
         return applicator(context, mat)
 
@@ -384,8 +384,8 @@ class OBJECT_OT_paste_transform(Operator):
 
 
 class VIEW3D_PT_copy_global_transform(Panel):
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
     bl_category = "Animation"
     bl_label = "Global Transform"
 
@@ -421,7 +421,7 @@ _msgbus_owner = object()
 
 def _refresh_3d_panels():
     print("\033[92mRefreshing panels\033[0m")
-    refresh_area_types = {"VIEW_3D"}
+    refresh_area_types = {'VIEW_3D'}
     for win in bpy.context.window_manager.windows:
         for area in win.screen.areas:
             if area.type not in refresh_area_types:
@@ -445,7 +445,7 @@ def _register_message_bus() -> None:
         owner=_msgbus_owner,
         args=(),
         notify=_refresh_3d_panels,
-        options={"PERSISTENT"},
+        options={'PERSISTENT'},
     )
 
 
