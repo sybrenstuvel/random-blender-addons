@@ -32,8 +32,7 @@ bl_info = {
     "support": "COMMUNITY",
 }
 
-import math
-from typing import Dict, Iterable, Optional, Set, Tuple, Union
+from typing import Iterable, Optional, Set, Union
 
 import bpy
 from bpy.types import Context, Object, Operator, Panel, PoseBone
