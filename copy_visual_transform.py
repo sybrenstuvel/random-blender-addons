@@ -440,7 +440,6 @@ _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
 def _register_message_bus():
-    print("\033[96mRegistering\033[0m msgbus subscription")
     bpy.msgbus.subscribe_rna(
         key=(bpy.types.ToolSettings, "use_keyframe_insert_auto"),
         owner=_msgbus_owner,
@@ -451,7 +450,6 @@ def _register_message_bus():
 
 
 def _unregister_message_bus():
-    print("\033[96mUnregistering\033[0m msgbus subscription")
     bpy.msgbus.clear_by_owner(_msgbus_owner)
 
 
