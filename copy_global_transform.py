@@ -420,7 +420,6 @@ _msgbus_owner = object()
 
 
 def _refresh_3d_panels():
-    print("\033[92mRefreshing panels\033[0m")
     refresh_area_types = {'VIEW_3D'}
     for win in bpy.context.window_manager.windows:
         for area in win.screen.areas:
