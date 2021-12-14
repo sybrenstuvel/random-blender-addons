@@ -179,34 +179,34 @@ def set_matrix(context: Context, mat: Matrix) -> None:
         AutoKeying.autokey_transformation(context, context.active_object)
 
 
-def selected_keyframes(context: Context) -> Iterable[float]:
+def _selected_keyframes(context: Context) -> Iterable[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the active bone/object are considered.
     """
     bone = context.active_pose_bone
     if bone:
-        return selected_keyframes_for_bone(context.active_object, bone)
-    return selected_keyframes_for_object(context.active_object)
+        return _selected_keyframes_for_bone(context.active_object, bone)
+    return _selected_keyframes_for_object(context.active_object)
 
 
-def selected_keyframes_for_bone(object: Object, bone: PoseBone) -> Iterable[float]:
+def _selected_keyframes_for_bone(object: Object, bone: PoseBone) -> Iterable[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given pose bone are considered.
     """
-    return selected_keyframes_in_action(object, f'pose.bones["{bone.name}"].')
+    return _selected_keyframes_in_action(object, f'pose.bones["{bone.name}"].')
 
 
-def selected_keyframes_for_object(object: Object) -> Iterable[float]:
+def _selected_keyframes_for_object(object: Object) -> Iterable[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given object are considered.
     """
-    return selected_keyframes_in_action(object, "")
+    return _selected_keyframes_in_action(object, "")
 
 
-def selected_keyframes_in_action(
+def _selected_keyframes_in_action(
     object: Object, rna_path_prefix: str
 ) -> Iterable[float]:
     """Return the list of frame numbers that have a selected key.
@@ -281,7 +281,13 @@ class OBJECT_OT_paste_transform(Operator):
 
     @classmethod
     def poll(cls, context: Context) -> bool:
-        return bool(context.active_pose_bone) or bool(context.active_object)
+        if not context.active_pose_bone and not context.active_object:
+            cls.poll_message_set("Select an object or pose bone")
+            return False
+        if not context.window_manager.clipboard.startswith("Matrix("):
+            cls.poll_message_set("Clipboard does not contain a valid matrix")
+            return False
+        return True
 
     @staticmethod
     def parse_print_m4(value: str) -> Optional[Matrix]:
@@ -325,7 +331,10 @@ class OBJECT_OT_paste_transform(Operator):
             self.report({"ERROR"}, "This mode requires auto-keying to work properly")
             return {"CANCELLED"}
 
-        frame_numbers = selected_keyframes(context)
+        frame_numbers = _selected_keyframes(context)
+        if not frame_numbers:
+            self.report({"WARNING"}, "No selected frames found")
+            return {"CANCELLED"}
 
         current_frame = context.scene.frame_current_final
         try:
@@ -348,7 +357,32 @@ class VIEW3D_PT_copy_visual_transform(Panel):
 
         col = layout.column(align=True)
         col.operator("object.copy_visual_transform")
-        col.operator("object.paste_transform")
+        col.operator("object.paste_transform").method = "CURRENT"
+
+        wants_autokey_col = col.column(align=True)
+        has_autokey = context.scene.tool_settings.use_keyframe_insert_auto
+        wants_autokey_col.enabled = has_autokey
+        if not has_autokey:
+            wants_autokey_col.label(text="These require auto-key:")
+        wants_autokey_col.operator(
+            "object.paste_transform", text="Paste on Selected Keys"
+        ).method = "EXISTING_KEYS"
+
+
+### Messagebus subscription to monitor changes & refresh panels.
+_msgbus_owner = object()
+
+
+def _refresh_3d_panels():
+    print("\033[92mRefreshing panels\033[0m")
+    refresh_area_types = {"VIEW_3D"}
+    for win in bpy.context.window_manager.windows:
+        for area in win.screen.areas:
+            if area.type not in refresh_area_types:
+                print(f"  skipping {area.type}")
+                continue
+            print(f"  redrawing {area.type}")
+            area.tag_redraw()
 
 
 classes = (
@@ -356,4 +390,37 @@ classes = (
     OBJECT_OT_paste_transform,
     VIEW3D_PT_copy_visual_transform,
 )
-register, unregister = bpy.utils.register_classes_factory(classes)
+_register, _unregister = bpy.utils.register_classes_factory(classes)
+
+
+def _register_message_bus():
+    print("\033[96mRegistering\033[0m msgbus subscription")
+    bpy.msgbus.subscribe_rna(
+        key=(bpy.types.ToolSettings, "use_keyframe_insert_auto"),
+        owner=_msgbus_owner,
+        args=(),
+        notify=_refresh_3d_panels,
+        options={"PERSISTENT"},
+    )
+
+
+def _unregister_message_bus():
+    print("\033[96mUnregistering\033[0m msgbus subscription")
+    bpy.msgbus.clear_by_owner(_msgbus_owner)
+
+
+@bpy.app.handlers.persistent
+def _on_blendfile_load_post(none, other_none) -> None:
+    # The parameters are required, but both are None.
+    _register_message_bus()
+
+
+def register():
+    _register()
+    bpy.app.handlers.load_post.append(_on_blendfile_load_post)
+
+
+def unregister():
+    _unregister()
+    _unregister_message_bus()
+    bpy.app.handlers.load_post.remove(_on_blendfile_load_post)
