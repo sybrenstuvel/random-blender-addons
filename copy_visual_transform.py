@@ -265,11 +265,23 @@ class OBJECT_OT_paste_transform(Operator):
             "Selected Keys",
             "Paste onto frames that have a selected key, potentially creating new keys on those frames",
         ),
+        (
+            'BAKE',
+            "Bake on Key Range",
+            "Paste onto all frames between the first and last selected key, creating new keyframes if necessary",
+        ),
     ]
     method: bpy.props.EnumProperty(
         items=_method_items,
         name="Paste Method",
         description="Update the current transform, selected keyframes, or even create new keys",
+    )
+    bake_step: bpy.props.IntProperty(
+        name="Frame Step",
+        description="Step=1 creates a key on every frame, step=2 bakes on 2s, etc",
+        min=1,
+        soft_min=1,
+        soft_max=5,
     )
 
     @classmethod
@@ -310,6 +322,7 @@ class OBJECT_OT_paste_transform(Operator):
         applicator = {
             "CURRENT": self._paste_current,
             "EXISTING_KEYS": self._paste_existing_keys,
+            "BAKE": self._paste_bake,
         }[self.method]
         return applicator(context, mat)
 
@@ -328,6 +341,36 @@ class OBJECT_OT_paste_transform(Operator):
             self.report({'WARNING'}, "No selected frames found")
             return {'CANCELLED'}
 
+        self._paste_on_frames(context, frame_numbers, matrix)
+
+    def _paste_bake(self, context: Context, matrix: Matrix) -> set[str]:
+        if not context.scene.tool_settings.use_keyframe_insert_auto:
+            self.report({'ERROR'}, "This mode requires auto-keying to work properly")
+            return {'CANCELLED'}
+
+        bake_step = max(1, self.bake_step)
+        # Put the clamped bake step back into RNA for the redo panel.
+        self.bake_step = bake_step
+
+        frame_start, frame_end = self._determine_bake_range(context)
+        frame_range = range(round(frame_start), round(frame_end) + bake_step, bake_step)
+        self._paste_on_frames(context, frame_range, matrix)
+        return {'FINISHED'}
+
+    def _determine_bake_range(self, context: Context) -> tuple[float, float]:
+        frame_numbers = _selected_keyframes(context)
+        if frame_numbers:
+            # Note that these could be the same frame, if len(frame_numbers) == 1:
+            return frame_numbers[0], frame_numbers[-1]
+
+        if context.scene.use_preview_range:
+            self.report({'INFO'}, "No selected keys, pasting over preview range")
+            return context.scene.frame_preview_start, context.scene.frame_preview_end
+
+        self.report({'INFO'}, "No selected keys, pasting over scene range")
+        return context.scene.frame_start, context.scene.frame_end
+
+    def _paste_on_frames(self, context: Context, frame_numbers: Iterable[float], matrix: Matrix) -> None:
         current_frame = context.scene.frame_current_final
         try:
             for frame in frame_numbers:
@@ -348,15 +391,25 @@ class VIEW3D_PT_copy_visual_transform(Panel):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.operator("object.copy_visual_transform")
-        col.operator("object.paste_transform").method = 'CURRENT'
+        col.operator("object.copy_visual_transform", icon='COPYDOWN')
+        col.operator("object.paste_transform", icon='PASTEDOWN').method = 'CURRENT'
 
         wants_autokey_col = col.column(align=True)
         has_autokey = context.scene.tool_settings.use_keyframe_insert_auto
         wants_autokey_col.enabled = has_autokey
         if not has_autokey:
             wants_autokey_col.label(text="These require auto-key:")
-        wants_autokey_col.operator("object.paste_transform", text="Paste on Selected Keys").method = 'EXISTING_KEYS'
+
+        wants_autokey_col.operator(
+            "object.paste_transform",
+            text="Paste on Selected Keys",
+            icon='PASTEDOWN',
+        ).method = 'EXISTING_KEYS'
+        wants_autokey_col.operator(
+            "object.paste_transform",
+            text="Paste and Bake",
+            icon='PASTEDOWN',
+        ).method = 'BAKE'
 
 
 ### Messagebus subscription to monitor changes & refresh panels.
