@@ -34,7 +34,7 @@ bl_info = {
     "support": "COMMUNITY",
 }
 
-from typing import Iterable, Optional, Set, Union
+from typing import Iterable, Optional, Union, Any
 
 import bpy
 from bpy.types import Context, Object, Operator, Panel, PoseBone
@@ -48,7 +48,7 @@ class AutoKeying:
     """
 
     @classmethod
-    def keying_options(cls, context: Context) -> Set[str]:
+    def keying_options(cls, context: Context) -> set[str]:
         """Retrieve the general keyframing options from user preferences."""
 
         prefs = context.preferences
@@ -66,7 +66,7 @@ class AutoKeying:
         return options
 
     @classmethod
-    def autokeying_options(cls, context: Context) -> Optional[Set[str]]:
+    def autokeying_options(cls, context: Context) -> Optional[set[str]]:
         """Retrieve the Auto Keyframe options, or None if disabled."""
 
         ts = context.scene.tool_settings
@@ -98,7 +98,7 @@ class AutoKeying:
     @staticmethod
     def keyframe_channels(
         target: Union[Object, PoseBone],
-        options: Set[str],
+        options: set[str],
         data_path: str,
         group: str,
         locks: Iterable[bool],
@@ -119,7 +119,7 @@ class AutoKeying:
     def key_transformation(
         cls,
         target: Union[Object, PoseBone],
-        options: Set[str],
+        options: set[str],
     ) -> None:
         """Keyframe transformation properties, avoiding keying locked channels."""
 
@@ -178,7 +178,7 @@ def set_matrix(context: Context, mat: Matrix) -> None:
         AutoKeying.autokey_transformation(context, context.active_object)
 
 
-def _selected_keyframes(context: Context) -> Iterable[float]:
+def _selected_keyframes(context: Context) -> list[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the active bone/object are considered.
@@ -189,7 +189,7 @@ def _selected_keyframes(context: Context) -> Iterable[float]:
     return _selected_keyframes_for_object(context.active_object)
 
 
-def _selected_keyframes_for_bone(object: Object, bone: PoseBone) -> Iterable[float]:
+def _selected_keyframes_for_bone(object: Object, bone: PoseBone) -> list[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given pose bone are considered.
@@ -197,7 +197,7 @@ def _selected_keyframes_for_bone(object: Object, bone: PoseBone) -> Iterable[flo
     return _selected_keyframes_in_action(object, f'pose.bones["{bone.name}"].')
 
 
-def _selected_keyframes_for_object(object: Object) -> Iterable[float]:
+def _selected_keyframes_for_object(object: Object) -> list[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given object are considered.
@@ -205,7 +205,7 @@ def _selected_keyframes_for_object(object: Object) -> Iterable[float]:
     return _selected_keyframes_in_action(object, "")
 
 
-def _selected_keyframes_in_action(object: Object, rna_path_prefix: str) -> Iterable[float]:
+def _selected_keyframes_in_action(object: Object, rna_path_prefix: str) -> list[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given object's Action on FCurves starting with rna_path_prefix are considered.
@@ -240,7 +240,7 @@ class OBJECT_OT_copy_global_transform(Operator):
     def poll(cls, context: Context) -> bool:
         return bool(context.active_pose_bone) or bool(context.active_object)
 
-    def execute(self, context: Context) -> Set[str]:
+    def execute(self, context: Context) -> set[str]:
         mat = get_matrix(context)
         rows = [f"            {tuple(row)!r}," for row in mat]
         as_string = "\n".join(rows)
@@ -273,12 +273,12 @@ class OBJECT_OT_paste_transform(Operator):
             "Paste onto all frames between the first and last selected key, creating new keyframes if necessary",
         ),
     ]
-    method: bpy.props.EnumProperty(
+    method: bpy.props.EnumProperty(  # type: ignore
         items=_method_items,
         name="Paste Method",
         description="Update the current transform, selected keyframes, or even create new keys",
     )
-    bake_step: bpy.props.IntProperty(
+    bake_step: bpy.props.IntProperty(  # type: ignore
         name="Frame Step",
         description="Only used for baking. Step=1 creates a key on every frame, step=2 bakes on 2s, etc",
         min=1,
@@ -310,7 +310,7 @@ class OBJECT_OT_paste_transform(Operator):
         floats = tuple(tuple(float(item) for item in line.split()) for line in lines)
         return Matrix(floats)
 
-    def execute(self, context: Context) -> Set[str]:
+    def execute(self, context: Context) -> set[str]:
         clipboard = context.window_manager.clipboard
         if clipboard.startswith("Matrix"):
             mat = eval(clipboard, {}, {"Matrix": Matrix})
@@ -439,7 +439,7 @@ classes = (
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
-def _register_message_bus():
+def _register_message_bus() -> None:
     bpy.msgbus.subscribe_rna(
         key=(bpy.types.ToolSettings, "use_keyframe_insert_auto"),
         owner=_msgbus_owner,
@@ -449,12 +449,12 @@ def _register_message_bus():
     )
 
 
-def _unregister_message_bus():
+def _unregister_message_bus() -> None:
     bpy.msgbus.clear_by_owner(_msgbus_owner)
 
 
-@bpy.app.handlers.persistent
-def _on_blendfile_load_post(none, other_none) -> None:
+@bpy.app.handlers.persistent  # type: ignore
+def _on_blendfile_load_post(none: Any, other_none: Any) -> None:
     # The parameters are required, but both are None.
     _register_message_bus()
 
