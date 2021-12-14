@@ -280,7 +280,7 @@ class OBJECT_OT_paste_transform(Operator):
     )
     bake_step: bpy.props.IntProperty(
         name="Frame Step",
-        description="Step=1 creates a key on every frame, step=2 bakes on 2s, etc",
+        description="Only used for baking. Step=1 creates a key on every frame, step=2 bakes on 2s, etc",
         min=1,
         soft_min=1,
         soft_max=5,
