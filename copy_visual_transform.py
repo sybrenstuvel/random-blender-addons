@@ -143,9 +143,7 @@ class AutoKeying:
         keyframe("scale", target.lock_scale)
 
     @classmethod
-    def autokey_transformation(
-        cls, context: Context, target: Union[Object, PoseBone]
-    ) -> None:
+    def autokey_transformation(cls, context: Context, target: Union[Object, PoseBone]) -> None:
         """Auto-key transformation properties."""
 
         options = cls.autokeying_options(context)
@@ -205,9 +203,7 @@ def _selected_keyframes_for_object(object: Object) -> Iterable[float]:
     return _selected_keyframes_in_action(object, "")
 
 
-def _selected_keyframes_in_action(
-    object: Object, rna_path_prefix: str
-) -> Iterable[float]:
+def _selected_keyframes_in_action(object: Object, rna_path_prefix: str) -> Iterable[float]:
     """Return the list of frame numbers that have a selected key.
 
     Only keys on the given object's Action on FCurves starting with rna_path_prefix are considered.
@@ -233,11 +229,10 @@ class OBJECT_OT_copy_visual_transform(Operator):
     bl_idname = "object.copy_visual_transform"
     bl_label = "Copy Visual Transform"
     bl_description = (
-        "Copies the matrix of the currently active object or pose bone "
-        "to the clipboard. Uses world-space matrices"
+        "Copies the matrix of the currently active object or pose bone to the clipboard. Uses world-space matrices"
     )
     # This operator cannot be un-done because it manipulates data outside Blender.
-    bl_options = {"REGISTER"}
+    bl_options = {'REGISTER'}
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -248,26 +243,25 @@ class OBJECT_OT_copy_visual_transform(Operator):
         rows = [f"            {tuple(row)!r}," for row in mat]
         as_string = "\n".join(rows)
         context.window_manager.clipboard = f"Matrix((\n{as_string}\n        ))"
-        return {"FINISHED"}
+        return {'FINISHED'}
 
 
 class OBJECT_OT_paste_transform(Operator):
     bl_idname = "object.paste_transform"
     bl_label = "Paste Transform"
     bl_description = (
-        "Pastes the matrix from the clipboard to the currently active pose bone "
-        "or object. Uses world-space matrices"
+        "Pastes the matrix from the clipboard to the currently active pose bone or object. Uses world-space matrices"
     )
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {'REGISTER', 'UNDO'}
 
     _method_items = [
         (
-            "CURRENT",
+            'CURRENT',
             "Current Transform",
             "Paste onto the current values only, only manipulating the animation data if auto-keying is enabled",
         ),
         (
-            "EXISTING_KEYS",
+            'EXISTING_KEYS',
             "Selected Keys",
             "Paste onto frames that have a selected key, potentially creating new keys on those frames",
         ),
@@ -310,8 +304,8 @@ class OBJECT_OT_paste_transform(Operator):
             mat = self.parse_print_m4(clipboard)
 
         if mat is None:
-            self.report({"ERROR"}, "Clipboard does not contain a valid matrix.")
-            return {"CANCELLED"}
+            self.report({'ERROR'}, "Clipboard does not contain a valid matrix.")
+            return {'CANCELLED'}
 
         applicator = {
             "CURRENT": self._paste_current,
@@ -322,18 +316,17 @@ class OBJECT_OT_paste_transform(Operator):
     @staticmethod
     def _paste_current(context: Context, matrix: Matrix) -> set[str]:
         set_matrix(context, matrix)
-        return {"FINISHED"}
+        return {'FINISHED'}
 
     def _paste_existing_keys(self, context: Context, matrix: Matrix) -> set[str]:
-
         if not context.scene.tool_settings.use_keyframe_insert_auto:
-            self.report({"ERROR"}, "This mode requires auto-keying to work properly")
-            return {"CANCELLED"}
+            self.report({'ERROR'}, "This mode requires auto-keying to work properly")
+            return {'CANCELLED'}
 
         frame_numbers = _selected_keyframes(context)
         if not frame_numbers:
-            self.report({"WARNING"}, "No selected frames found")
-            return {"CANCELLED"}
+            self.report({'WARNING'}, "No selected frames found")
+            return {'CANCELLED'}
 
         current_frame = context.scene.frame_current_final
         try:
@@ -342,7 +335,7 @@ class OBJECT_OT_paste_transform(Operator):
                 set_matrix(context, matrix)
         finally:
             context.scene.frame_set(int(current_frame), subframe=current_frame % 1.0)
-        return {"FINISHED"}
+        return {'FINISHED'}
 
 
 class VIEW3D_PT_copy_visual_transform(Panel):
@@ -356,16 +349,14 @@ class VIEW3D_PT_copy_visual_transform(Panel):
 
         col = layout.column(align=True)
         col.operator("object.copy_visual_transform")
-        col.operator("object.paste_transform").method = "CURRENT"
+        col.operator("object.paste_transform").method = 'CURRENT'
 
         wants_autokey_col = col.column(align=True)
         has_autokey = context.scene.tool_settings.use_keyframe_insert_auto
         wants_autokey_col.enabled = has_autokey
         if not has_autokey:
             wants_autokey_col.label(text="These require auto-key:")
-        wants_autokey_col.operator(
-            "object.paste_transform", text="Paste on Selected Keys"
-        ).method = "EXISTING_KEYS"
+        wants_autokey_col.operator("object.paste_transform", text="Paste on Selected Keys").method = 'EXISTING_KEYS'
 
 
 ### Messagebus subscription to monitor changes & refresh panels.
