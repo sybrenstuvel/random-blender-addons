@@ -344,6 +344,7 @@ class OBJECT_OT_paste_transform(Operator):
             return {'CANCELLED'}
 
         self._paste_on_frames(context, frame_numbers, matrix)
+        return {'FINISHED'}
 
     def _paste_bake(self, context: Context, matrix: Matrix) -> set[str]:
         if not context.scene.tool_settings.use_keyframe_insert_auto:
@@ -380,7 +381,6 @@ class OBJECT_OT_paste_transform(Operator):
                 set_matrix(context, matrix)
         finally:
             context.scene.frame_set(int(current_frame), subframe=current_frame % 1.0)
-        return {'FINISHED'}
 
 
 class VIEW3D_PT_copy_global_transform(Panel):
