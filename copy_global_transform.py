@@ -27,8 +27,8 @@ It's called "global" to avoid confusion with the Blender World data-block.
 bl_info = {
     "name": "Copy Global Transform",
     "author": "Sybren A. Stüvel",
-    "version": (1, 4),
-    "blender": (2, 91, 0),
+    "version": (2, 0),
+    "blender": (3, 1, 0),
     "location": "N-panel in the 3D Viewport",
     "category": "Animation",
     "support": 'COMMUNITY',
