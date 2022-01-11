@@ -15,9 +15,9 @@ http://code.blender.org/2015/10/debugging-python-code-with-pycharm/
 bl_info = {
     'name': 'Remote debugger',
     'author': 'Sybren A. Stüvel',
-    'version': (0, 4, 1),
-    'blender': (2, 80, 0),
-    'location': 'Press [Space], search for "debugger"',
+    'version': (0, 5, 0),
+    'blender': (3, 0, 0),
+    'location': 'Press [F3] (in Blender 2.80-3.00) or [Space] (in Blender 2.79) and then search for "debugger"',
     'category': 'Development',
 }
 
@@ -38,15 +38,10 @@ __all_prop_funcs = {
 
 def convert_properties(class_):
     """Class decorator to avoid warnings in Blender 2.80+
-
     This decorator replaces property definitions like this:
-
         someprop = bpy.props.IntProperty()
-
     to annotations, as introduced in Blender 2.80:
-
         someprop: bpy.props.IntProperty()
-
     No-op if running on Blender 2.79 or older.
     """
 
@@ -56,21 +51,10 @@ def convert_properties(class_):
     if not hasattr(class_, '__annotations__'):
         class_.__annotations__ = {}
 
-    attrs_to_delete = []
     for name, value in class_.__dict__.items():
-        if not isinstance(value, tuple) or len(value) != 2:
-            continue
-
-        prop_func, kwargs = value
-        if prop_func not in __all_prop_funcs:
-            continue
-
-        # This is a property definition, replace it with annotation.
-        attrs_to_delete.append(name)
-        class_.__annotations__[name] = value
-
-    for attr_name in attrs_to_delete:
-        delattr(class_, attr_name)
+        # This is a property definition, add annotation for it.
+        if name in ("eggpath", "pydevpath"):
+            class_.__annotations__[name] = value
 
     return class_
 
@@ -165,16 +149,32 @@ class DEBUG_OT_connect_debugger_pydev(bpy.types.Operator):
         return {'FINISHED'}
 
 
+classes = (
+    DEBUG_OT_connect_debugger_pycharm,
+    DEBUG_OT_connect_debugger_pydev,
+    DebuggerAddonPreferences,
+)
+
+def DEBUG_OT_connect_debugger_pycharm_menu(self, context):
+    self.layout.operator(DEBUG_OT_connect_debugger_pycharm.bl_idname, text=DEBUG_OT_connect_debugger_pycharm.bl_label)
+
+def DEBUG_OT_connect_debugger_pydev_menu(self, context):
+    self.layout.operator(DEBUG_OT_connect_debugger_pydev.bl_idname, text=DEBUG_OT_connect_debugger_pydev.bl_label)
+
 def register():
-    bpy.utils.register_class(DEBUG_OT_connect_debugger_pycharm)
-    bpy.utils.register_class(DEBUG_OT_connect_debugger_pydev)
-    bpy.utils.register_class(DebuggerAddonPreferences)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)
+    bpy.types.VIEW3D_MT_view.append(DEBUG_OT_connect_debugger_pycharm_menu)
+    bpy.types.VIEW3D_MT_view.append(DEBUG_OT_connect_debugger_pydev_menu)
 
 
 def unregister():
-    bpy.utils.unregister_class(DEBUG_OT_connect_debugger_pycharm)
-    bpy.utils.unregister_class(DEBUG_OT_connect_debugger_pydev)
-    bpy.utils.unregister_class(DebuggerAddonPreferences)
+    bpy.types.VIEW3D_MT_view.remove(DEBUG_OT_connect_debugger_pydev_menu)
+    bpy.types.VIEW3D_MT_view.remove(DEBUG_OT_connect_debugger_pycharm_menu)
+    from bpy.utils import unregister_class
+    for cls in reversed(classes):
+        unregister_class(cls)
 
 
 if __name__ == '__main__':
