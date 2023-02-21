@@ -1,20 +1,4 @@
-# ====================== BEGIN GPL LICENSE BLOCK ======================
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program; if not, write to the Free Software Foundation,
-#  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# ======================= END GPL LICENSE BLOCK ========================
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 """
 Copy Global Transform
@@ -31,9 +15,11 @@ bl_info = {
     "blender": (3, 1, 0),
     "location": "N-panel in the 3D Viewport",
     "category": "Animation",
-    "support": 'COMMUNITY',
+    "support": 'OFFICIAL',
+    "doc_url": "{BLENDER_MANUAL_URL}/addons/animation/copy_global_transform.html",
 }
 
+import ast
 from typing import Iterable, Optional, Union, Any
 
 import bpy
@@ -82,9 +68,9 @@ class AutoKeying:
         options = cls.keying_options(context)
 
         if prefs.edit.use_keyframe_insert_available:
-            options.add("INSERTKEY_AVAILABLE")
-        if ts.auto_keying_mode == "REPLACE_KEYS":
-            options.add("INSERTKEY_REPLACE")
+            options.add('INSERTKEY_AVAILABLE')
+        if ts.auto_keying_mode == 'REPLACE_KEYS':
+            options.add('INSERTKEY_REPLACE')
         return options
 
     @staticmethod
@@ -194,7 +180,8 @@ def _selected_keyframes_for_bone(object: Object, bone: PoseBone) -> list[float]:
 
     Only keys on the given pose bone are considered.
     """
-    return _selected_keyframes_in_action(object, f'pose.bones["{bone.name}"].')
+    name = bpy.utils.escape_identifier(bone.name)
+    return _selected_keyframes_in_action(object, f'pose.bones["{name}"].')
 
 
 def _selected_keyframes_for_object(object: Object) -> list[float]:
@@ -242,9 +229,9 @@ class OBJECT_OT_copy_global_transform(Operator):
 
     def execute(self, context: Context) -> set[str]:
         mat = get_matrix(context)
-        rows = [f"            {tuple(row)!r}," for row in mat]
+        rows = [f"    {tuple(row)!r}," for row in mat]
         as_string = "\n".join(rows)
-        context.window_manager.clipboard = f"Matrix((\n{as_string}\n        ))"
+        context.window_manager.clipboard = f"Matrix((\n{as_string}\n))"
         return {'FINISHED'}
 
 
@@ -313,12 +300,12 @@ class OBJECT_OT_paste_transform(Operator):
     def execute(self, context: Context) -> set[str]:
         clipboard = context.window_manager.clipboard
         if clipboard.startswith("Matrix"):
-            mat = eval(clipboard, {}, {"Matrix": Matrix})
+            mat = Matrix(ast.literal_eval(clipboard[6:]))
         else:
             mat = self.parse_print_m4(clipboard)
 
         if mat is None:
-            self.report({'ERROR'}, "Clipboard does not contain a valid matrix.")
+            self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
             return {'CANCELLED'}
 
         applicator = {
@@ -424,9 +411,7 @@ def _refresh_3d_panels():
     for win in bpy.context.window_manager.windows:
         for area in win.screen.areas:
             if area.type not in refresh_area_types:
-                print(f"  skipping {area.type}")
                 continue
-            print(f"  redrawing {area.type}")
             area.tag_redraw()
 
 
