@@ -242,6 +242,10 @@ class OBJECT_OT_copy_global_transform(Operator):
         return {'FINISHED'}
 
 
+class UnableToMirrorError(Exception):
+    """Raised when mirroring is enabled but no mirror object/bone is set."""
+
+
 class OBJECT_OT_paste_transform(Operator):
     bl_idname = "object.paste_transform"
     bl_label = "Paste Global Transform"
@@ -349,7 +353,11 @@ class OBJECT_OT_paste_transform(Operator):
             self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
             return {'CANCELLED'}
 
-        mat = self._maybe_mirror(context, mat)
+        try:
+            mat = self._maybe_mirror(context, mat)
+        except UnableToMirrorError:
+            self.report({'ERROR'}, "Unable to mirror, no mirror object/bone configured")
+            return {'CANCELLED'}
 
         applicator = {
             'CURRENT': self._paste_current,
@@ -370,10 +378,12 @@ class OBJECT_OT_paste_transform(Operator):
         if not mirror_ob and mirror_bone and ctx_ob and ctx_ob.type == 'ARMATURE':
             mirror_ob = ctx_ob
 
-        if mirror_ob:
-            if mirror_ob.type == 'ARMATURE':
-                return self._mirror_over_bone(matrix, mirror_ob, mirror_bone)
-            return self._mirror_over_ob(matrix, mirror_ob)
+        if not mirror_ob:
+            raise UnableToMirrorError()
+
+        if mirror_ob.type == 'ARMATURE' and mirror_bone:
+            return self._mirror_over_bone(matrix, mirror_ob, mirror_bone)
+        return self._mirror_over_ob(matrix, mirror_ob)
 
     def _mirror_over_ob(self, matrix: Matrix, mirror_ob: bpy.types.Object) -> Matrix:
         mirror_matrix = mirror_ob.matrix_world
