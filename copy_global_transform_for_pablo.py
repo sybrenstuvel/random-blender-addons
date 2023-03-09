@@ -398,38 +398,31 @@ class OBJECT_OT_paste_transform(Operator):
     def _mirror_over_matrix(self, matrix: Matrix, mirror_matrix: Matrix) -> Matrix:
         # Compute the matrix in the space of the mirror matrix:
         mat_local = mirror_matrix.inverted() @ matrix
-        print(f"\033[96mlocal\033[0m:\n{mat_local}")
-        mirrored_local = mat_local.copy()
+
+        # Decompose the matrix, as we don't want to touch the scale. This
+        # operator should only mirror the translation and rotation components.
+        trans, rot_q, scale = mat_local.decompose()
 
         # Mirror the translation component:
         axis_index = ord(self.mirror_axis_loc) - ord('x')
-        assert 0 <= axis_index <= 2
-        mirrored_local[axis_index][3] *= -1
+        trans[axis_index] *= -1
 
-        # Mirror the rotation component:
-        mirrored_local *= _rot_mirror_matrices[self.mirror_axis_rot]
+        # Flip the rotation, and use a rotation order that applies the to-be-flipped axis first.
+        axis_index = ord(self.mirror_axis_rot) - ord('x')
+        rot_orders = {
+            'x': 'XYZ',
+            'y': 'YZX',
+            'z': 'ZXY',
+        }
+        rot_order = rot_orders[self.mirror_axis_rot]
+        rot_e = rot_q.to_euler(rot_order)
+        rot_e[axis_index] *= -1
 
-        # Find the vector that indicates the rotation angle over the rotation axis:
-        # print(f"mirrored translation:\n{mirrored_local}")
-        # proj_plane = 'XYZ'.replace(self.mirror_axis_rot.upper(), '')
-        # proj_mat = Matrix.OrthoProjection(proj_plane, 4)
-        # projected = proj_mat @ mirrored_local
-        # print(f"projected:\n{projected}")
-
-        loc, rot_q, sca = mirrored_local.decompose()
-        rot_e = rot_q.to_euler('XYZ')
-        rot_e.y *= -1
-        rot_e.z *= -1
-        # d = math.degrees
-        # print(f"rot_e in : x={d(rot_e.x)} y={d(rot_e.y)} z={d(rot_e.z)} (degrees)")
-        # setattr(loc, self.mirror_axis_loc, -getattr(loc, self.mirror_axis_loc))
-        # setattr(rot_e, self.mirror_axis_rot, -getattr(rot_e, self.mirror_axis_rot))
-        # print(f"rot_e out: x={d(rot_e.x)} y={d(rot_e.y)} z={d(rot_e.z)} (degrees)")
-        mirrored_local = Matrix.LocRotScale(loc, rot_e, sca)
+        # Recompose the local matrix:
+        mat_local = Matrix.LocRotScale(trans, rot_e, scale)
 
         # Go back to world space:
-        mirrored_world = mirror_matrix @ mirrored_local
-
+        mirrored_world = mirror_matrix @ mat_local
         return mirrored_world
 
     @staticmethod
