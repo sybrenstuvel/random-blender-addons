@@ -20,7 +20,6 @@ bl_info = {
 }
 
 import ast
-import math
 from typing import Iterable, Optional, Union, Any
 
 import bpy
@@ -33,16 +32,6 @@ _axis_enum_items = [
     ("y", "Y", "", 2),
     ("z", "Z", "", 3),
 ]
-_rot_mirror_matrices = {
-    'z': Matrix(
-        [
-            (1, -1, 1, 1),
-            (1, 1, 1, 1),
-            (-1, 1, 1, 1),
-            (1, 1, 1, 1),
-        ]
-    ),
-}
 
 
 class AutoKeying:
