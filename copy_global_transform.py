@@ -604,10 +604,6 @@ def _on_blendfile_load_post(none: Any, other_none: Any) -> None:
     _register_message_bus()
 
 
-def _refresh_operator_defaults() -> None:
-    pass
-
-
 def register():
     _register()
     bpy.app.handlers.load_post.append(_on_blendfile_load_post)
@@ -627,22 +623,6 @@ def register():
     bpy.types.Scene.addon_copy_global_transform_mirror_bone = bpy.props.StringProperty(
         name="Mirror Bone",
         description="Bone to use for the mirroring",
-    )
-
-    # These set the "paste" operator default values.
-    mirror_axis_loc = bpy.props.EnumProperty(
-        items=_axis_enum_items,
-        name="Location Axis",
-        description="Coordinate axis used to mirror the location part of the transform",
-        default='x',
-        update=_refresh_operator_defaults,
-    )
-    mirror_axis_rot = bpy.props.EnumProperty(
-        items=_axis_enum_items,
-        name="Rotation Axis",
-        description="Coordinate axis used to mirror the rotation part of the transform",
-        default='z',
-        update=_refresh_operator_defaults,
     )
 
 
