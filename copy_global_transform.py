@@ -406,16 +406,20 @@ class OBJECT_OT_paste_transform(Operator):
         axis_index = ord(self.mirror_axis_loc) - ord('x')
         trans[axis_index] *= -1
 
-        # Flip the rotation, and use a rotation order that applies the to-be-flipped axis first.
-        axis_index = ord(self.mirror_axis_rot) - ord('x')
-        rot_orders = {
-            'x': 'XYZ',
-            'y': 'YZX',
-            'z': 'ZXY',
-        }
-        rot_order = rot_orders[self.mirror_axis_rot]
-        rot_e = rot_q.to_euler(rot_order)
-        rot_e[axis_index] *= -1
+        # Flip the rotation, and use a rotation order that applies the to-be-flipped axes first.
+        match self.mirror_axis_rot:
+            case 'x':
+                rot_e = rot_q.to_euler('XYZ')
+                rot_e.x *= -1  # Flip the requested rotation axis.
+                rot_e.y *= -1  # Also flip the bone roll.
+            case 'y':
+                rot_e = rot_q.to_euler('YZX')
+                rot_e.y *= -1  # Flip the requested rotation axis.
+                rot_e.z *= -1  # Also flip another axis? Not sure how to handle this one.
+            case 'z':
+                rot_e = rot_q.to_euler('ZYX')
+                rot_e.z *= -1  # Flip the requested rotation axis.
+                rot_e.y *= -1  # Also flip the bone roll.
 
         # Recompose the local matrix:
         mat_local = Matrix.LocRotScale(trans, rot_e, scale)
