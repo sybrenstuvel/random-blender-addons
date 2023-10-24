@@ -133,16 +133,16 @@ def draw_callback_px():
     line_len_factor = (time_in_warning /
                        (full_problem_after_sec() - secs_before_nag))
 
-    width = bpy.context.area.width
+    width = bpy.context.region.width - 29
 
     if line_len_factor >= 1.0:
         # Full problem mode!
-        height = bpy.context.area.height
+        height = bpy.context.region.height
         positions = [
             (line_thickness, line_thickness),
-            (width-line_thickness, line_thickness),
-            (width-line_thickness, height-line_thickness),
-            (line_thickness, height-line_thickness),
+            (width - line_thickness, line_thickness),
+            (width - line_thickness, height - line_thickness),
+            (line_thickness, height - line_thickness),
             (line_thickness, line_thickness),
         ]
     else:
