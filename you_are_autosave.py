@@ -27,7 +27,7 @@ bl_info = {
     'name': 'You Are Autosave',
     'author': 'Sybren A. Stüvel',
     'description': "Show a warning when you haven't saved in a while",
-    'version': (1, 1, 0),
+    'version': (1, 2, 0),
     'blender': (3, 6, 0),
     'location': 'Somewhere',
     'category': 'System',
@@ -46,14 +46,16 @@ def secs_since_last_save() -> float:
     return time.monotonic() - last_save_timestamp
 
 
+def prefs() -> "YouAreAutosavePreferences":
+    return bpy.context.preferences.addons['you_are_autosave'].preferences
+
+
 def start_nagging_in_sec() -> float:
-    prefs = bpy.context.preferences.addons['you_are_autosave'].preferences
-    return float(prefs.nag_start_time * 60)
+    return float(prefs().nag_start_time * 60)
 
 
 def full_problem_after_sec() -> float:
-    prefs = bpy.context.preferences.addons['you_are_autosave'].preferences
-    return float(prefs.full_problem_time * 60)
+    return float(prefs().full_problem_time * 60)
 
 
 def check_last_save_timestamp() -> float:
@@ -103,6 +105,7 @@ def pluralize(count: float, singular: str) -> str:
 def draw_callback_px():
     font_id = 0  # XXX, need to find out how best to get this.
 
+    color = prefs().color
     width = bpy.context.region.width
     height = bpy.context.region.height
 
@@ -125,7 +128,7 @@ def draw_callback_px():
     # draw some text
     blf.position(font_id, width * 0.3, 12, 0)
     blf.size(font_id, 14.0)
-    blf.color(font_id, 1.0, 0.5, 0.5, 0.5)
+    blf.color(font_id, *color, 0.5)
     blf.draw(font_id, f"Last saved {ago} ago")
 
     # Draw a line
@@ -148,8 +151,7 @@ def draw_callback_px():
             (0, 0),
         ]
         batch = batch_for_shader(shader, 'TRIS', {"pos": positions})
-        redness = line_len_factor - 1.0
-        shader.uniform_float("color", (redness, 0.0, 0.0, redness))
+        shader.uniform_float("color", (*color, line_len_factor - 1.0))
         batch.draw(shader)
 
     if line_len_factor >= 1.0:
@@ -161,15 +163,17 @@ def draw_callback_px():
             (line_thickness, height - line_thickness),
             (line_thickness, line_thickness),
         ]
+        alpha = 1.0
     else:
         line_len = line_len_factor * width
         positions = [
             (0, line_thickness),
             (line_len, line_thickness),
         ]
+        alpha = 0.5
 
     batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": positions})
-    shader.uniform_float("color", (1.0, 0.0, 0.0, 1.0))
+    shader.uniform_float("color", (*color, alpha))
     batch.draw(shader)
 
     # restore opengl defaults
@@ -216,6 +220,15 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         subtype="TIME",
     )
 
+    color: bpy.props.FloatVectorProperty(
+        name="Color",
+        min=0,
+        max=1,
+        default=(1.0, 0.1, 0.03),
+        subtype='COLOR',
+        size=3,
+    )
+
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
 
@@ -225,6 +238,7 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         col.use_property_decorate = False
         col.prop(self, "nag_start_time")
         col.prop(self, "full_problem_time")
+        col.prop(self, "color")
 
 
 classes = (YouAreAutosavePreferences,)
