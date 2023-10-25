@@ -70,7 +70,7 @@ def check_last_save_timestamp() -> float:
             continue
         area.tag_redraw()
 
-    if secs_since_save < 62:
+    if secs_since_save < 300:
         return 0.1
     return 1
 
@@ -81,8 +81,7 @@ def show_warning():
     if draw_handle is not None:
         return
 
-    draw_handle = bpy.types.SpaceView3D.draw_handler_add(
-        draw_callback_px, (), 'WINDOW', 'POST_PIXEL')
+    draw_handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_px, (), 'WINDOW', 'POST_PIXEL')
 
 
 def clear_warning():
@@ -104,21 +103,27 @@ def pluralize(count: float, singular: str) -> str:
 def draw_callback_px():
     font_id = 0  # XXX, need to find out how best to get this.
 
+    width = bpy.context.region.width
+    height = bpy.context.region.height
+
+    if bpy.context.space_data.show_region_ui:
+        width -= 29
+
     secs_since_save = secs_since_last_save()
     if secs_since_save == float("inf"):
         ago = f"a long time"
     elif secs_since_save > 3600:
-        hours = round(secs_since_save/3600, 1)
+        hours = round(secs_since_save / 3600, 1)
         ago = f"{hours:.0f} {pluralize(hours, 'hour')}"
     elif secs_since_save > 60:
-        mins = round(secs_since_save/60)
+        mins = round(secs_since_save / 60)
         ago = f"{mins:.0f} {pluralize(mins, 'min')}"
     else:
         secs = round(secs_since_save)
         ago = f"{secs:.0f} seconds"
 
     # draw some text
-    blf.position(font_id, 10, 12, 0)
+    blf.position(font_id, width * 0.3, 12, 0)
     blf.size(font_id, 14.0)
     blf.color(font_id, 1.0, 0.5, 0.5, 0.5)
     blf.draw(font_id, f"Last saved {ago} ago")
@@ -130,14 +135,25 @@ def draw_callback_px():
 
     secs_before_nag = start_nagging_in_sec()
     time_in_warning = secs_since_save - secs_before_nag
-    line_len_factor = (time_in_warning /
-                       (full_problem_after_sec() - secs_before_nag))
+    line_len_factor = time_in_warning / (full_problem_after_sec() - secs_before_nag)
 
-    width = bpy.context.region.width - 29
+    if 1.0 < line_len_factor < float("inf"):
+        # Panic mode.
+        positions = [
+            (0, 0),
+            (width, 0),
+            (width, height),
+            (width, height),
+            (0, height),
+            (0, 0),
+        ]
+        batch = batch_for_shader(shader, 'TRIS', {"pos": positions})
+        redness = line_len_factor - 1.0
+        shader.uniform_float("color", (redness, 0.0, 0.0, redness))
+        batch.draw(shader)
 
     if line_len_factor >= 1.0:
         # Full problem mode!
-        height = bpy.context.region.height
         positions = [
             (line_thickness, line_thickness),
             (width - line_thickness, line_thickness),
@@ -153,8 +169,7 @@ def draw_callback_px():
         ]
 
     batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": positions})
-
-    shader.uniform_float("color", (1.0, 0.0, 0.0, 0.5))
+    shader.uniform_float("color", (1.0, 0.0, 0.0, 1.0))
     batch.draw(shader)
 
     # restore opengl defaults
@@ -223,8 +238,7 @@ def register() -> None:
     bpy.app.handlers.load_post.append(on_load_post)
     bpy.app.handlers.load_factory_startup_post.append(on_load_post)
 
-    bpy.app.timers.register(check_last_save_timestamp,
-                            first_interval=0, persistent=True)
+    bpy.app.timers.register(check_last_save_timestamp, first_interval=0, persistent=True)
 
 
 def unregister() -> None:
