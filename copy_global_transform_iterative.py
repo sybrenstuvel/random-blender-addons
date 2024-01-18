@@ -12,12 +12,13 @@ Simple add-on for copying world-space transforms.
 It's called "global" to avoid confusion with the Blender World data-block.
 """
 
+import ast
 import time
-from typing import Iterable, Optional
+from typing import Optional
 
 import bpy
 from bpy.types import Context, Operator, Object
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 
 bl_info = {
@@ -42,14 +43,15 @@ class OBJECT_OT_paste_transform_iterative(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context: Context) -> set[str]:
-        D = bpy.data
-        T = D.objects['Target']
-        S = D.objects['Suzanne']
+        mat = self.get_matrix_from_clipboard(context)
+        if mat is None:
+            self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
+            return {'CANCELLED'}
 
-        self.subject = S
-        self.target = T
+        self.subject = context.active_object
+        self.dofs_target = self.dofs_from_matrix(mat)
 
-        dofs = self.calc_dofs(S)
+        dofs = self.calc_dofs(self.subject)
         num_dofs = len(dofs)
 
         delta = 0.1
@@ -68,8 +70,6 @@ class OBJECT_OT_paste_transform_iterative(Operator):
             self.apply_dofs(context, dofs)
 
             error = self.calc_error()
-        #    print(f'  Error: {error}')
-        #    print(f'  Delta: {delta}')
 
             if error < 0.0001:
                 print('Done, error is small enough.')
@@ -90,13 +90,6 @@ class OBJECT_OT_paste_transform_iterative(Operator):
                     print(f'to {delta}')
 
             last_error = error
-            # if error < 0.05 and delta > 0.00011:
-            #     print(f'\033[91mDecreasing delta\033[0m from {delta} ', end='')
-            #     delta = 0.0001
-            #     print(f'to {delta}')
-
-        #    elif error < 0.03:
-        #        delta = 0.001
 
         time_end = time.monotonic()
         duration = time_end - time_start
@@ -107,9 +100,10 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         print(f'per step: {1000*per_step:.1f} msec')
         print(f'last delta: {delta}')
 
-        error = self.calc_error()
-        error_vec = self.world_space(S) - self.world_space(T)
+        error_vec = self.calc_error_vec()
         print(f'error dofs : {self.fmt_dofs(error_vec)}')
+
+        error = self.calc_error()
         print(f'final error: {error}')
 
         return {'FINISHED'}
@@ -150,17 +144,66 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         return f'[{comma_sep}]'
 
     @staticmethod
-    def world_space(ob: Object) -> Vector:
+    def dofs_from_matrix(mat: Matrix) -> Vector:
         # Returns Vector of DoFs in world space.
-        mat_world = ob.matrix_world
-        return Vector(list(mat_world.to_translation()) + list(mat_world.to_euler()))
+        return Vector(list(mat.to_translation()) + list(mat.to_euler()))
+
+    def calc_error_vec(self) -> Vector:
+        dofs_subject = self.dofs_from_matrix(self.subject.matrix_world)
+        # TODO: handle wrapping of eulers.
+        return dofs_subject - self.dofs_target
 
     def calc_error(self) -> float:
-        dofs_subject = self.world_space(self.subject)
-        dofs_target = self.world_space(self.target)
-        # TODO: handle wrapping of eulers.
-        error_vec = dofs_subject - dofs_target
+        error_vec = self.calc_error_vec()
         return error_vec.length
+
+    @classmethod
+    def poll(cls, context: Context) -> bool:
+        if not context.active_pose_bone and not context.active_object:
+            cls.poll_message_set("Select an object or pose bone")
+            return False
+
+        clipboard = context.window_manager.clipboard.strip()
+        if not (clipboard.startswith("Matrix(") or clipboard.startswith("<Matrix 4x4")):
+            cls.poll_message_set("Clipboard does not contain a valid matrix")
+            return False
+        return True
+
+    @classmethod
+    def get_matrix_from_clipboard(cls, context: Context) -> Optional[Matrix]:
+        clipboard = context.window_manager.clipboard.strip()
+        if clipboard.startswith("Matrix"):
+            return Matrix(ast.literal_eval(clipboard[6:]))
+        if clipboard.startswith("<Matrix 4x4"):
+            return cls.parse_repr_m4(clipboard[12:-1])
+        return cls.parse_print_m4(clipboard)
+
+    @staticmethod
+    def parse_print_m4(value: str) -> Optional[Matrix]:
+        """Parse output from Blender's print_m4() function.
+
+        Expects four lines of space-separated floats.
+        """
+
+        lines = value.strip().splitlines()
+        if len(lines) != 4:
+            return None
+
+        floats = tuple(tuple(float(item) for item in line.split())
+                       for line in lines)
+        return Matrix(floats)
+
+    @staticmethod
+    def parse_repr_m4(value: str) -> Optional[Matrix]:
+        """Four lines of (a, b, c, d) floats."""
+
+        lines = value.strip().splitlines()
+        if len(lines) != 4:
+            return None
+
+        floats = tuple(tuple(float(item.strip())
+                       for item in line.strip()[1:-1].split(',')) for line in lines)
+        return Matrix(floats)
 
 
 def _draw_button(panel, context: Context) -> None:
