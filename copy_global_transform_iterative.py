@@ -83,9 +83,8 @@ class OBJECT_OT_paste_transform_iterative(Operator):
                     f'(difference of {diff:8.03g})'
                 )
 
-                if error < 0.2 and delta > 1e-6:
-                    print(
-                        f'\033[91mDecreasing delta\033[0m from {delta} ', end='')
+                if delta > 1e-6:
+                    print(f'\033[91mDecreasing delta\033[0m from {delta} ', end='')
                     delta *= 0.95
                     print(f'to {delta}')
 
@@ -93,7 +92,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
 
         time_end = time.monotonic()
         duration = time_end - time_start
-        per_step = duration / (step_num+1)
+        per_step = duration / (step_num + 1)
 
         print(f'Steps   : {step_num+1}')
         print(f'Duration: {duration:.1f} sec')
@@ -108,7 +107,9 @@ class OBJECT_OT_paste_transform_iterative(Operator):
 
         return {'FINISHED'}
 
-    def optimisation_step(self, context: Context, last_dofs: Vector, dof_index: int, delta: float, last_error: float) -> float:
+    def optimisation_step(
+        self, context: Context, last_dofs: Vector, dof_index: int, delta: float, last_error: float
+    ) -> float:
         dofs = last_dofs.copy()
         dofs[dof_index] += delta
 
@@ -189,8 +190,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         if len(lines) != 4:
             return None
 
-        floats = tuple(tuple(float(item) for item in line.split())
-                       for line in lines)
+        floats = tuple(tuple(float(item) for item in line.split()) for line in lines)
         return Matrix(floats)
 
     @staticmethod
@@ -201,8 +201,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         if len(lines) != 4:
             return None
 
-        floats = tuple(tuple(float(item.strip())
-                       for item in line.strip()[1:-1].split(',')) for line in lines)
+        floats = tuple(tuple(float(item.strip()) for item in line.strip()[1:-1].split(',')) for line in lines)
         return Matrix(floats)
 
 
@@ -211,9 +210,7 @@ def _draw_button(panel, context: Context) -> None:
     layout.operator(OBJECT_OT_paste_transform_iterative.bl_idname)
 
 
-classes = (
-    OBJECT_OT_paste_transform_iterative,
-)
+classes = (OBJECT_OT_paste_transform_iterative,)
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
