@@ -62,11 +62,13 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         time_start = time.monotonic()
         step_num = 0  # The for-loop won't assign if step_count = 0.
         for step_num in range(step_count):
-            dof_index = step_num % num_dofs
-            dof_step = self.optimisation_step(
-                context, dofs, dof_index, delta, last_error)
+            # dof_index = step_num % num_dofs
+            new_dofs = dofs.copy()
+            for dof_index in range(num_dofs):
+                dof_step = self.optimisation_step(context, dofs, dof_index, delta, last_error)
+                new_dofs[dof_index] += dof_step
 
-            dofs[dof_index] += dof_step
+            dofs = new_dofs
             self.apply_dofs(context, dofs)
 
             error = self.calc_error()
@@ -80,7 +82,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
                 print(
                     f'Step {step_num}: error is getting bigger, '
                     f'from {last_error:.7f} to {error:.7f} '
-                    f'(difference of {diff:8.03g})'
+                    f'(difference of {diff:5.03g})'
                 )
 
                 if delta > 1e-6:
