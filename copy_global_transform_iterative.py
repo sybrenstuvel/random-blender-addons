@@ -31,7 +31,7 @@ from typing import Optional, Protocol, TypeAlias, Optional
 
 import bpy
 from bpy.types import Context, Operator, Object, PoseBone, Event
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Quaternion, Euler
 
 
 bl_info = {
@@ -145,12 +145,23 @@ class ExecutionState:
 class TransformSolver:
     subjecet: Transformable
     dofs_target: DoFs
+    rot_target_expmap: Vector
     max_step_count: int
 
     def __init__(self, subject: Transformable, dofs_target: DoFs, max_step_count: int = 10000) -> None:
         self.subject = subject
         self.dofs_target = dofs_target
         self.max_step_count = max_step_count
+
+        # TODO: do this better.
+        match len(dofs_target):
+            case 6:  # Euler angles.
+                quat = Euler(dofs_target[3:]).to_quaternion()
+            case 7:  # Quaternions.
+                quat = Quaternion(dofs_target[3:])
+            case _:  # Wait, whut?
+                raise ValueError(f'no idea what to with {dofs_target}')
+        self.rot_target_expmap = quat.to_exponential_map()
 
     def setup(self) -> ExecutionState:
         state = ExecutionState(
@@ -257,8 +268,24 @@ class TransformSolver:
     def _calc_error_vec(self) -> Vector:
         mat = self.subject.matrix_world()
         dofs_subject = self.dofs_from_matrix(mat)
-        # TODO: handle wrapping of eulers.
-        return dofs_subject - self.dofs_target
+
+        # return dofs_subject - self.dofs_target
+
+        err_loc = dofs_subject.xyz - self.dofs_target.xyz
+
+        # TODO: do this better.
+        match len(dofs_subject):
+            case 6:  # Euler angles.
+                quat = Euler(dofs_subject[3:]).to_quaternion()
+            case 7:  # Quaternions.
+                quat = Quaternion(dofs_subject[3:])
+            case _:  # Wait, whut?
+                raise ValueError(f'no idea what to with {dofs_subject}')
+
+        rot_subject_expmap = quat.to_exponential_map()
+        err_rot = rot_subject_expmap - self.rot_target_expmap
+
+        return Vector(list(err_loc) + list(err_rot))
 
     def _calc_error(self) -> float:
         error_vec = self._calc_error_vec()
