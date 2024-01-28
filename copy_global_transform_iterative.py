@@ -278,6 +278,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
     def execute(self, context: Context) -> set[str]:
         solver = self._get_solver(context)
         if not solver:
+            # Error has already been reported.
             return {'CANCELLED'}
 
         solver.execute()
@@ -300,8 +301,14 @@ class OBJECT_OT_paste_transform_iterative(Operator):
 
     def modal(self, context: Context, event: Event) -> set[str]:
         if event.type in {'RIGHTMOUSE', 'ESC'}:
+            msg = f'Aborted after {self.state.step_num} steps, error = {self.state.last_error:.4f}'
+            print(msg)
+            self.report({'WARNING'}, msg)
             self.cancel(context)
             return {'FINISHED'}
+
+        if event.type != 'TIMER':
+            return {'PASS_THROUGH'}
 
         new_state = self.solver.step(self.state)
         if new_state is None:
