@@ -181,8 +181,14 @@ class TransformSolver:
         state.step_num += 1
         new_dofs = state.dofs.copy()
 
+        print(f"Step {state.step_num}: iterating over {len(state.dofs)} DoFs")
         for dof_index in range(len(state.dofs)):
             dof_step = self._optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
+            if dof_step == 0:
+                print(f"Step {state.step_num}: skipping update of dof {dof_index}, change in error too small.")
+                print(f"  error={state.last_error}")
+                print(f"  delta={state.delta}")
+                continue
             new_dofs[dof_index] += dof_step
 
         state.dofs = new_dofs
@@ -258,6 +264,11 @@ class TransformSolver:
 
         # Clean up after ourselves.
         self.subject.apply_dofs(last_dofs)
+
+        # if abs(last_error - error) < 1e-5:
+        #     # Altering this DoF doesn't change the error, don't bother stepping.
+        #     # This is to avoid adjusting all DoFs when only one still has an error.
+        #     return 0.0
 
         if error < last_error:
             # This was going in the right direction.
