@@ -4,6 +4,18 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+# To do:
+#
+# - [x] Separate functionality from operator
+# - [ ] Split execution into preparation and single step functions
+# - [ ] Rework operator so it's modal and shows the movement
+# - [ ] Support for bones
+# - [ ] Support for quaternion rotation
+# - [ ] Support for axis angle
+# - [ ] Support for euler wrapping
+# - [ ] Support for axis angle/quaternion flipping
+
+
 """
 Copy Global Transform
 
@@ -14,7 +26,7 @@ It's called "global" to avoid confusion with the Blender World data-block.
 
 import ast
 import time
-from typing import Optional
+from typing import Optional, Protocol, TypeAlias
 
 import bpy
 from bpy.types import Context, Operator, Object
@@ -25,7 +37,7 @@ bl_info = {
     "name": "Copy Global Transform (iterative prototype)",
     "author": "Sybren A. Stüvel",
     "version": (0, 1),
-    "blender": (4, 1, 0),
+    "blender": (4, 0, 0),
     "location": "N-panel in the 3D Viewport",
     "category": "Animation",
     "support": 'OFFICIAL',
@@ -34,24 +46,55 @@ bl_info = {
 }
 
 
-class OBJECT_OT_paste_transform_iterative(Operator):
-    bl_idname = "object.paste_transform_iterative"
-    bl_label = "Iterative Paste"
-    bl_description = (
-        "Pastes the matrix from the clipboard to the currently active pose bone or object. Uses world-space matrices"
-    )
-    bl_options = {'REGISTER', 'UNDO'}
+DoFs: TypeAlias = Vector
+"""Degrees of Freedom."""
 
-    def execute(self, context: Context) -> set[str]:
-        mat = self.get_matrix_from_clipboard(context)
-        if mat is None:
-            self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
-            return {'CANCELLED'}
 
-        self.subject = context.active_object
-        self.dofs_target = self.dofs_from_matrix(mat)
+class Transformable(Protocol):
+    """Interface for a bone or an object."""
 
-        dofs = self.calc_dofs(self.subject)
+    def calc_dofs(self) -> DoFs:
+        pass
+
+    def apply_dofs(self, dofs: DoFs) -> None:
+        pass
+
+    def matrix_world(self) -> Matrix:
+        pass
+
+
+class TransformableObject:
+    object: Object
+    view_layer: bpy.types.ViewLayer
+
+    def __init__(self, context: Context, object: Object) -> None:
+        self.view_layer = context.view_layer
+        self.object = object
+
+    def calc_dofs(self) -> DoFs:
+        dofs = Vector(list(self.object.location) + list(self.object.rotation_euler))
+        return dofs
+
+    def apply_dofs(self, dofs: DoFs) -> None:
+        assert len(dofs) == 6
+        self.object.location = dofs[0:3]
+        self.object.rotation_euler = dofs[3:6]
+        self.view_layer.update()
+
+    def matrix_world(self) -> Matrix:
+        return self.object.matrix_world
+
+
+class TransformSolver:
+    subjecet: Transformable
+    dofs_target: DoFs
+
+    def __init__(self, subject: Transformable, dofs_target: DoFs) -> None:
+        self.subject = subject
+        self.dofs_target = dofs_target
+
+    def execute(self) -> None:
+        dofs = self.subject.calc_dofs()
         num_dofs = len(dofs)
 
         delta = 0.1
@@ -65,11 +108,11 @@ class OBJECT_OT_paste_transform_iterative(Operator):
             # dof_index = step_num % num_dofs
             new_dofs = dofs.copy()
             for dof_index in range(num_dofs):
-                dof_step = self.optimisation_step(context, dofs, dof_index, delta, last_error)
+                dof_step = self.optimisation_step(dofs, dof_index, delta, last_error)
                 new_dofs[dof_index] += dof_step
 
             dofs = new_dofs
-            self.apply_dofs(context, dofs)
+            self.subject.apply_dofs(dofs)
 
             error = self.calc_error()
 
@@ -107,19 +150,16 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         error = self.calc_error()
         print(f'final error: {error}')
 
-        return {'FINISHED'}
-
-    def optimisation_step(
-        self, context: Context, last_dofs: Vector, dof_index: int, delta: float, last_error: float
-    ) -> float:
+    def optimisation_step(self, last_dofs: DoFs, dof_index: int, delta: float, last_error: float) -> float:
+        """Return the delta to be applied to the given DoF."""
         dofs = last_dofs.copy()
         dofs[dof_index] += delta
 
-        self.apply_dofs(context, dofs)
+        self.subject.apply_dofs(dofs)
         error = self.calc_error()
 
         # Clean up after ourselves.
-        self.apply_dofs(context, last_dofs)
+        self.subject.apply_dofs(last_dofs)
 
         if error < last_error:
             # This was going in the right direction.
@@ -129,17 +169,6 @@ class OBJECT_OT_paste_transform_iterative(Operator):
             step = -delta
 
         return step
-
-    @staticmethod
-    def calc_dofs(ob: Object) -> Vector:
-        return Vector(list(ob.location) + list(ob.rotation_euler))
-
-    def apply_dofs(self, context: Context, dofs: Vector) -> None:
-        assert len(dofs) == 6
-        self.subject.location = dofs[0:3]
-        self.subject.rotation_euler = dofs[3:6]
-        context.view_layer.update()
-        # ob.update_tag(refresh={'OBJECT'})
 
     @staticmethod
     def fmt_dofs(dofs: Vector) -> str:
@@ -152,13 +181,36 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         return Vector(list(mat.to_translation()) + list(mat.to_euler()))
 
     def calc_error_vec(self) -> Vector:
-        dofs_subject = self.dofs_from_matrix(self.subject.matrix_world)
+        mat = self.subject.matrix_world()
+        dofs_subject = self.dofs_from_matrix(mat)
         # TODO: handle wrapping of eulers.
         return dofs_subject - self.dofs_target
 
     def calc_error(self) -> float:
         error_vec = self.calc_error_vec()
-        return error_vec.length
+        return float(error_vec.length)
+
+
+class OBJECT_OT_paste_transform_iterative(Operator):
+    bl_idname = "object.paste_transform_iterative"
+    bl_label = "Iterative Paste"
+    bl_description = (
+        "Pastes the matrix from the clipboard to the currently active pose bone or object. Uses world-space matrices"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context: Context) -> set[str]:
+        mat = self.get_matrix_from_clipboard(context)
+        if mat is None:
+            self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
+            return {'CANCELLED'}
+
+        subject = TransformableObject(context, context.active_object)
+        dofs_target = TransformSolver.dofs_from_matrix(mat)
+        solver = TransformSolver(subject, dofs_target)
+        solver.execute()
+
+        return {'FINISHED'}
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -207,7 +259,7 @@ class OBJECT_OT_paste_transform_iterative(Operator):
         return Matrix(floats)
 
 
-def _draw_button(panel, context: Context) -> None:
+def _draw_button(panel: bpy.types.Panel, context: Context) -> None:
     layout = panel.layout
     layout.operator(OBJECT_OT_paste_transform_iterative.bl_idname)
 
@@ -216,12 +268,12 @@ classes = (OBJECT_OT_paste_transform_iterative,)
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
-def register():
+def register() -> None:
     _register()
     bpy.types.VIEW3D_PT_copy_global_transform.append(_draw_button)
 
 
-def unregister():
+def unregister() -> None:
     _unregister()
 
     try:
