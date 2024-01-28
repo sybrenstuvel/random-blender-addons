@@ -26,6 +26,7 @@ It's called "global" to avoid confusion with the Blender World data-block.
 
 import ast
 import time
+from dataclasses import dataclass
 from typing import Optional, Protocol, TypeAlias
 
 import bpy
@@ -133,6 +134,14 @@ class TransformableBone:
         return mat
 
 
+@dataclass
+class ExecutionState:
+    dofs: DoFs
+    last_error: DoFs
+    delta: float = 0.1
+    step_num: int = 0
+
+
 class TransformSolver:
     subjecet: Transformable
     dofs_target: DoFs
@@ -142,25 +151,24 @@ class TransformSolver:
         self.dofs_target = dofs_target
 
     def execute(self) -> None:
-        dofs = self.subject.calc_dofs()
-        num_dofs = len(dofs)
+        state = ExecutionState(
+            dofs=self.subject.calc_dofs(),
+            last_error=self.calc_error(),
+        )
 
-        delta = 0.1
         step_count = 10000
-
-        last_error = self.calc_error()
 
         time_start = time.monotonic()
         step_num = 0  # The for-loop won't assign if step_count = 0.
         for step_num in range(step_count):
-            # dof_index = step_num % num_dofs
-            new_dofs = dofs.copy()
-            for dof_index in range(num_dofs):
-                dof_step = self.optimisation_step(dofs, dof_index, delta, last_error)
+            new_dofs = state.dofs.copy()
+
+            for dof_index in range(len(state.dofs)):
+                dof_step = self.optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
                 new_dofs[dof_index] += dof_step
 
-            dofs = new_dofs
-            self.subject.apply_dofs(dofs)
+            state.dofs = new_dofs
+            self.subject.apply_dofs(state.dofs)
 
             error = self.calc_error()
 
@@ -168,20 +176,20 @@ class TransformSolver:
                 print('Done, error is small enough.')
                 break
 
-            if error > last_error:
-                diff = error - last_error
+            if error > state.last_error:
+                diff = error - state.last_error
                 print(
                     f'Step {step_num}: error is getting bigger, '
-                    f'from {last_error:.7f} to {error:.7f} '
+                    f'from {state.last_error:.7f} to {error:.7f} '
                     f'(difference of {diff:5.03g})'
                 )
 
-                if delta > 1e-6:
-                    print(f'\033[91mDecreasing delta\033[0m from {delta} ', end='')
-                    delta *= 0.95
-                    print(f'to {delta}')
+                if state.delta > 1e-6:
+                    print(f'\033[91mDecreasing delta\033[0m from {state.delta} ', end='')
+                    state.delta *= 0.95
+                    print(f'to {state.delta}')
 
-            last_error = error
+            state.last_error = error
 
         time_end = time.monotonic()
         duration = time_end - time_start
@@ -190,7 +198,7 @@ class TransformSolver:
         print(f'Steps   : {step_num+1}')
         print(f'Duration: {duration:.1f} sec')
         print(f'per step: {1000*per_step:.1f} msec')
-        print(f'last delta: {delta}')
+        print(f'last delta: {state.delta}')
 
         error_vec = self.calc_error_vec()
         print(f'error dofs : {self.fmt_dofs(error_vec)}')
