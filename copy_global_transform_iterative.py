@@ -153,7 +153,7 @@ class TransformSolver:
     def execute(self) -> None:
         state = ExecutionState(
             dofs=self.subject.calc_dofs(),
-            last_error=self.calc_error(),
+            last_error=self._calc_error(),
         )
 
         step_count = 10000
@@ -164,13 +164,13 @@ class TransformSolver:
             new_dofs = state.dofs.copy()
 
             for dof_index in range(len(state.dofs)):
-                dof_step = self.optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
+                dof_step = self._optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
                 new_dofs[dof_index] += dof_step
 
             state.dofs = new_dofs
             self.subject.apply_dofs(state.dofs)
 
-            error = self.calc_error()
+            error = self._calc_error()
 
             if error < 0.0001:
                 print('Done, error is small enough.')
@@ -200,19 +200,19 @@ class TransformSolver:
         print(f'per step: {1000*per_step:.1f} msec')
         print(f'last delta: {state.delta}')
 
-        error_vec = self.calc_error_vec()
+        error_vec = self._calc_error_vec()
         print(f'error dofs : {self.fmt_dofs(error_vec)}')
 
-        error = self.calc_error()
+        error = self._calc_error()
         print(f'final error: {error}')
 
-    def optimisation_step(self, last_dofs: DoFs, dof_index: int, delta: float, last_error: float) -> float:
+    def _optimisation_step(self, last_dofs: DoFs, dof_index: int, delta: float, last_error: float) -> float:
         """Return the delta to be applied to the given DoF."""
         dofs = last_dofs.copy()
         dofs[dof_index] += delta
 
         self.subject.apply_dofs(dofs)
-        error = self.calc_error()
+        error = self._calc_error()
 
         # Clean up after ourselves.
         self.subject.apply_dofs(last_dofs)
@@ -236,14 +236,14 @@ class TransformSolver:
         # Returns Vector of DoFs in world space.
         return Vector(list(mat.to_translation()) + list(mat.to_euler()))
 
-    def calc_error_vec(self) -> Vector:
+    def _calc_error_vec(self) -> Vector:
         mat = self.subject.matrix_world()
         dofs_subject = self.dofs_from_matrix(mat)
         # TODO: handle wrapping of eulers.
         return dofs_subject - self.dofs_target
 
-    def calc_error(self) -> float:
-        error_vec = self.calc_error_vec()
+    def _calc_error(self) -> float:
+        error_vec = self._calc_error_vec()
         return float(error_vec.length)
 
 
