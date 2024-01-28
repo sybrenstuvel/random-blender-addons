@@ -164,10 +164,17 @@ class TransformSolver:
         self.rot_target_expmap = quat.to_exponential_map()
 
     def setup(self) -> ExecutionState:
+        err_vec = self._calc_error_vec()
+        delta = self._delta_for_error(1.0, err_vec)
+
         state = ExecutionState(
             dofs=self.subject.calc_dofs(),
-            last_error=self._calc_error(),
+            last_error=self._calc_error(err_vec),
+            delta=delta,
         )
+
+        print(f"startup state: {state}")
+
         return state
 
     def step(self, state: ExecutionState) -> Optional[ExecutionState]:
@@ -181,7 +188,8 @@ class TransformSolver:
         state.dofs = new_dofs
         self.subject.apply_dofs(state.dofs)
 
-        error = self._calc_error()
+        err_vec = self._calc_error_vec()
+        error = self._calc_error(err_vec)
 
         if error < 0.0001:
             print('Done, error is small enough.')
@@ -197,8 +205,10 @@ class TransformSolver:
 
             if state.delta > 1e-6:
                 print(f'\033[91mDecreasing delta\033[0m from {state.delta} ', end='')
-                state.delta *= 0.95
+                state.delta = max(1e-5, state.delta * 0.90)
                 print(f'to {state.delta}')
+        else:
+            state.delta = self._delta_for_error(state.delta, err_vec)
 
         state.last_error = error
 
@@ -232,16 +242,19 @@ class TransformSolver:
         error_vec = self._calc_error_vec()
         print(f'error dofs : {self.fmt_dofs(error_vec)}')
 
-        error = self._calc_error()
+        error = self._calc_error(error_vec)
         print(f'final error: {error}')
 
     def _optimisation_step(self, last_dofs: DoFs, dof_index: int, delta: float, last_error: float) -> float:
         """Return the delta to be applied to the given DoF."""
+
         dofs = last_dofs.copy()
         dofs[dof_index] += delta
 
         self.subject.apply_dofs(dofs)
-        error = self._calc_error()
+
+        error_vec = self._calc_error_vec()
+        error = self._calc_error(error_vec)
 
         # Clean up after ourselves.
         self.subject.apply_dofs(last_dofs)
@@ -287,9 +300,13 @@ class TransformSolver:
 
         return Vector(list(err_loc) + list(err_rot))
 
-    def _calc_error(self) -> float:
-        error_vec = self._calc_error_vec()
+    def _calc_error(self, error_vec: Vector) -> float:
         return float(error_vec.length)
+
+    def _delta_for_error(self, current_delta: float, error_vec: Vector) -> float:
+        average = sum(abs(x) for x in error_vec) / len(error_vec)
+        delta: float = max(1e-5, current_delta * 0.75, average)
+        return delta
 
 
 class OBJECT_OT_paste_transform_iterative(Operator):
