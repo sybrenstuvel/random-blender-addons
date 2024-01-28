@@ -27,10 +27,10 @@ It's called "global" to avoid confusion with the Blender World data-block.
 import ast
 import time
 from dataclasses import dataclass
-from typing import Optional, Protocol, TypeAlias
+from typing import Optional, Protocol, TypeAlias, Optional
 
 import bpy
-from bpy.types import Context, Operator, Object, PoseBone
+from bpy.types import Context, Operator, Object, PoseBone, Event
 from mathutils import Vector, Matrix
 
 
@@ -145,57 +145,75 @@ class ExecutionState:
 class TransformSolver:
     subjecet: Transformable
     dofs_target: DoFs
+    max_step_count: int
 
-    def __init__(self, subject: Transformable, dofs_target: DoFs) -> None:
+    def __init__(self, subject: Transformable, dofs_target: DoFs, max_step_count: int = 10000) -> None:
         self.subject = subject
         self.dofs_target = dofs_target
+        self.max_step_count = max_step_count
 
-    def execute(self) -> None:
+    def setup(self) -> ExecutionState:
         state = ExecutionState(
             dofs=self.subject.calc_dofs(),
             last_error=self._calc_error(),
         )
+        return state
 
-        step_count = 10000
+    def step(self, state: ExecutionState) -> Optional[ExecutionState]:
+        state.step_num += 1
+        new_dofs = state.dofs.copy()
+
+        for dof_index in range(len(state.dofs)):
+            dof_step = self._optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
+            new_dofs[dof_index] += dof_step
+
+        state.dofs = new_dofs
+        self.subject.apply_dofs(state.dofs)
+
+        error = self._calc_error()
+
+        if error < 0.0001:
+            print('Done, error is small enough.')
+            return None
+
+        if error > state.last_error:
+            diff = error - state.last_error
+            print(
+                f'Step {state.step_num}: error is getting bigger, '
+                f'from {state.last_error:.7f} to {error:.7f} '
+                f'(difference of {diff:5.03g})'
+            )
+
+            if state.delta > 1e-6:
+                print(f'\033[91mDecreasing delta\033[0m from {state.delta} ', end='')
+                state.delta *= 0.95
+                print(f'to {state.delta}')
+
+        state.last_error = error
+
+        if state.step_num >= self.max_step_count:
+            print(f'Ran out of steps, stopping at {state.step_num}')
+            return None
+
+        return state
+
+    def execute(self) -> None:
+        state = self.setup()
 
         time_start = time.monotonic()
-        step_num = 0  # The for-loop won't assign if step_count = 0.
-        for step_num in range(step_count):
-            new_dofs = state.dofs.copy()
-
-            for dof_index in range(len(state.dofs)):
-                dof_step = self._optimisation_step(state.dofs, dof_index, state.delta, state.last_error)
-                new_dofs[dof_index] += dof_step
-
-            state.dofs = new_dofs
-            self.subject.apply_dofs(state.dofs)
-
-            error = self._calc_error()
-
-            if error < 0.0001:
-                print('Done, error is small enough.')
+        while True:
+            # Don't assign directly to 'state' so that the last not-None state
+            # is available when execution ends.
+            next_state = self.step(state)
+            if next_state is None:
                 break
-
-            if error > state.last_error:
-                diff = error - state.last_error
-                print(
-                    f'Step {step_num}: error is getting bigger, '
-                    f'from {state.last_error:.7f} to {error:.7f} '
-                    f'(difference of {diff:5.03g})'
-                )
-
-                if state.delta > 1e-6:
-                    print(f'\033[91mDecreasing delta\033[0m from {state.delta} ', end='')
-                    state.delta *= 0.95
-                    print(f'to {state.delta}')
-
-            state.last_error = error
-
+            state = next_state
         time_end = time.monotonic()
-        duration = time_end - time_start
-        per_step = duration / (step_num + 1)
 
-        print(f'Steps   : {step_num+1}')
+        duration = time_end - time_start
+        per_step = duration / (state.step_num + 1)
+
+        print(f'Steps   : {state.step_num+1}')
         print(f'Duration: {duration:.1f} sec')
         print(f'per step: {1000*per_step:.1f} msec')
         print(f'last delta: {state.delta}')
@@ -255,12 +273,56 @@ class OBJECT_OT_paste_transform_iterative(Operator):
     )
     bl_options = {'REGISTER', 'UNDO'}
 
+    state: ExecutionState
+
     def execute(self, context: Context) -> set[str]:
+        solver = self._get_solver(context)
+        if not solver:
+            return {'CANCELLED'}
+
+        solver.execute()
+        return {'FINISHED'}
+
+    def invoke(self, context: Context, event: Event) -> set[str]:
+        solver = self._get_solver(context)
+        if not solver:
+            return {'CANCELLED'}
+
+        self.solver = solver
+        self.state = self.solver.setup()
+
+        # Set up the modal timer.
+        wm = context.window_manager
+        self._timer = wm.event_timer_add(0.001, window=context.window)
+        wm.modal_handler_add(self)
+
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context: Context, event: Event) -> set[str]:
+        if event.type in {'RIGHTMOUSE', 'ESC'}:
+            self.cancel(context)
+            return {'FINISHED'}
+
+        new_state = self.solver.step(self.state)
+        if new_state is None:
+            self.report({'INFO'}, f'Done after {self.state.step_num} steps')
+            self.cancel(context)
+            return {'FINISHED'}
+        self.state = new_state
+
+        return {'RUNNING_MODAL'}
+
+    def cancel(self, context: Context) -> None:
+        wm = context.window_manager
+        wm.event_timer_remove(self._timer)
+
+    def _get_solver(self, context: Context) -> Optional[TransformSolver]:
         mat = self.get_matrix_from_clipboard(context)
         if mat is None:
             self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
-            return {'CANCELLED'}
+            return None
 
+        subject: Transformable
         if context.active_pose_bone:
             subject = TransformableBone(context, context.active_object, context.active_pose_bone)
         else:
@@ -268,9 +330,8 @@ class OBJECT_OT_paste_transform_iterative(Operator):
 
         dofs_target = TransformSolver.dofs_from_matrix(mat)
         solver = TransformSolver(subject, dofs_target)
-        solver.execute()
 
-        return {'FINISHED'}
+        return solver
 
     @classmethod
     def poll(cls, context: Context) -> bool:
