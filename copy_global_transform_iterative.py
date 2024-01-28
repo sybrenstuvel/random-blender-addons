@@ -9,8 +9,8 @@
 # - [x] Separate functionality from operator
 # - [ ] Split execution into preparation and single step functions
 # - [ ] Rework operator so it's modal and shows the movement
-# - [ ] Support for bones
-# - [ ] Support for quaternion rotation
+# - [x] Support for bones
+# - [x] Support for quaternion rotation
 # - [ ] Support for axis angle
 # - [ ] Support for euler wrapping
 # - [ ] Support for axis angle/quaternion flipping
@@ -29,7 +29,7 @@ import time
 from typing import Optional, Protocol, TypeAlias
 
 import bpy
-from bpy.types import Context, Operator, Object
+from bpy.types import Context, Operator, Object, PoseBone
 from mathutils import Vector, Matrix
 
 
@@ -54,9 +54,14 @@ class Transformable(Protocol):
     """Interface for a bone or an object."""
 
     def calc_dofs(self) -> DoFs:
+        """Return the current DoFs.
+
+        This is typically the list of local location & rotation values.
+        """
         pass
 
     def apply_dofs(self, dofs: DoFs) -> None:
+        """Apply the given DoFs."""
         pass
 
     def matrix_world(self) -> Matrix:
@@ -66,23 +71,66 @@ class Transformable(Protocol):
 class TransformableObject:
     object: Object
     view_layer: bpy.types.ViewLayer
+    rotation_prop_name: str
 
     def __init__(self, context: Context, object: Object) -> None:
         self.view_layer = context.view_layer
         self.object = object
 
+        match object.rotation_mode:
+            case "AXIS_ANGLE":
+                raise TypeError("Axis/Angle not yet supported")
+            case "QUATERNION":
+                self.rotation_prop_name = "rotation_quaternion"
+            case _:
+                self.rotation_prop_name = "rotation_euler"
+
     def calc_dofs(self) -> DoFs:
-        dofs = Vector(list(self.object.location) + list(self.object.rotation_euler))
-        return dofs
+        loc_dofs = list(self.object.location)
+        rot_dofs = list(getattr(self.object, self.rotation_prop_name))
+        return Vector(loc_dofs + rot_dofs)
 
     def apply_dofs(self, dofs: DoFs) -> None:
-        assert len(dofs) == 6
         self.object.location = dofs[0:3]
-        self.object.rotation_euler = dofs[3:6]
+        setattr(self.object, self.rotation_prop_name, dofs[3:])
         self.view_layer.update()
 
     def matrix_world(self) -> Matrix:
         return self.object.matrix_world
+
+
+class TransformableBone:
+    arm_object: Object
+    pose_bone: PoseBone
+    view_layer: bpy.types.ViewLayer
+    rotation_prop_name: str
+
+    def __init__(self, context: Context, arm_object: Object, pose_bone: PoseBone) -> None:
+        self.view_layer = context.view_layer
+        self.arm_object = arm_object
+        self.pose_bone = pose_bone
+
+        match pose_bone.rotation_mode:
+            case "AXIS_ANGLE":
+                raise TypeError("Axis/Angle not yet supported")
+            case "QUATERNION":
+                self.rotation_prop_name = "rotation_quaternion"
+            case _:
+                self.rotation_prop_name = "rotation_euler"
+
+    def calc_dofs(self) -> DoFs:
+        loc_dofs = list(self.pose_bone.location)
+        rot_dofs = list(getattr(self.pose_bone, self.rotation_prop_name))
+        return Vector(loc_dofs + rot_dofs)
+
+    def apply_dofs(self, dofs: DoFs) -> None:
+        self.pose_bone.location = dofs[0:3]
+        setattr(self.pose_bone, self.rotation_prop_name, dofs[3:])
+        self.view_layer.update()
+
+    def matrix_world(self) -> Matrix:
+        mat = self.arm_object.matrix_world @ self.pose_bone.matrix
+        return mat
 
 
 class TransformSolver:
@@ -205,7 +253,11 @@ class OBJECT_OT_paste_transform_iterative(Operator):
             self.report({'ERROR'}, "Clipboard does not contain a valid matrix")
             return {'CANCELLED'}
 
-        subject = TransformableObject(context, context.active_object)
+        if context.active_pose_bone:
+            subject = TransformableBone(context, context.active_object, context.active_pose_bone)
+        else:
+            subject = TransformableObject(context, context.active_object)
+
         dofs_target = TransformSolver.dofs_from_matrix(mat)
         solver = TransformSolver(subject, dofs_target)
         solver.execute()
