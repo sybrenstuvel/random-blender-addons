@@ -23,10 +23,11 @@ bl_info = {
 }
 
 import ast
-from typing import Iterable, Optional, Union, Any
+import dataclasses
+from typing import Iterable, Optional, Union, Any, Protocol
 
 import bpy
-from bpy.types import Context, Object, Operator, Panel, PoseBone, UILayout
+from bpy.types import Context, Object, Operator, Panel, PoseBone, UILayout, FCurve, Camera, FModifierStepped
 from mathutils import Matrix
 
 
@@ -501,6 +502,182 @@ class OBJECT_OT_paste_transform(Operator):
             context.scene.frame_set(int(current_frame), subframe=current_frame % 1.0)
 
 
+class Transformable(Protocol):
+    """Interface for a bone or an object."""
+
+    def matrix_world(self) -> Matrix:
+        pass
+
+    def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
+        pass
+
+
+@dataclasses.dataclass(frozen=True)
+class TransformableObject:
+    object: Object
+
+    def matrix_world(self) -> Matrix:
+        return self.object.matrix_world
+
+    def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
+        self.object.matrix_world = matrix
+        AutoKeying.autokey_transformation(context, self.object)
+
+
+@dataclasses.dataclass
+class TransformableBone:
+    arm_object: Object
+    pose_bone: PoseBone
+
+    def __init__(self, pose_bone: PoseBone) -> None:
+        # Figure out the owning object from the pose bone's RNA path. This is
+        # necessary as `context.selected_pose_bones` can return bones from any
+        # armature object, not just the active one.
+        rna_path = repr(pose_bone)
+        index = rna_path.index('.pose.bones')
+        arm_ob_rna_path = rna_path[:index].removeprefix('bpy.data.')
+
+        # Work around issue #120140.
+        arm_ob_rna_path = arm_ob_rna_path.replace("'", '"')
+
+        self.arm_object = bpy.data.path_resolve(arm_ob_rna_path)
+        self.pose_bone = pose_bone
+
+    def matrix_world(self) -> Matrix:
+        mat = self.arm_object.matrix_world @ self.pose_bone.matrix
+        return mat
+
+    def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
+        # Convert matrix to armature-local space
+        arm_eval = self.arm_object.evaluated_get(context.view_layer.depsgraph)
+        self.pose_bone.matrix = arm_eval.matrix_world.inverted() @ matrix
+        AutoKeying.autokey_transformation(context, self.pose_bone)
+
+    def __hash__(self) -> int:
+        return hash(self.pose_bone.as_pointer())
+
+
+class OBJECT_OT_fix_to_camera(Operator):
+    bl_idname = "object.fix_to_camera"
+    bl_label = "Fix to Scene Camera"
+    bl_description = ""
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context: Context) -> bool:
+        if not context.active_pose_bone and not context.active_object:
+            cls.poll_message_set("Select an object or pose bone")
+            return False
+        if not context.mode in {'POSE', 'OBJECT'}:
+            cls.poll_message_set("Switch to Pose or Object mode")
+            return False
+        if not context.scene.camera:
+            cls.poll_message_set("The Scene needs a camera")
+            return False
+        return True
+
+    def execute(self, context: Context) -> set[str]:
+        match context.mode:
+            case 'OBJECT':
+                transformables = self._transformable_objects(context)
+            case 'POSE':
+                transformables = self._transformable_pbones(context)
+            case mode:
+                self.report({'ERROR'}, 'Unsupported mode: %r' % mode)
+                return {'CANCELLED'}
+
+        restore_frame = context.scene.frame_current
+        try:
+            self._execute(context, transformables)
+        finally:
+            context.scene.frame_set(restore_frame)
+        return {'FINISHED'}
+
+    def _transformable_objects(self, context: Context) -> list[Transformable]:
+        return [TransformableObject(object=ob) for ob in context.selected_editable_objects]
+
+    def _transformable_pbones(self, context: Context) -> list[Transformable]:
+        return [TransformableBone(pose_bone=bone) for bone in context.selected_pose_bones]
+
+    def _get_matrices(self, camera: Camera, transformables: list[Transformable]) -> dict[Transformable, Matrix]:
+        camera_mat_inv = camera.matrix_world.inverted()
+        return {t: camera_mat_inv @ t.matrix_world() for t in transformables}
+
+    def _execute(self, context: Context, transformables: list[Transformable]) -> None:
+        depsgraph = context.view_layer.depsgraph
+        scene = context.scene
+
+        scene.frame_set(scene.frame_start)
+        camera_eval = scene.camera.evaluated_get(depsgraph)
+        matrices = self._get_matrices(camera_eval, transformables)
+
+        for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
+            scene.frame_set(frame)
+            cam_matrix_world = camera_eval.matrix_world
+            for t, camera_rel_matrix in matrices.items():
+                t.set_matrix_world(context, cam_matrix_world @ camera_rel_matrix)
+
+
+class ANIM_OT_fcurve_bake_stepped(Operator):
+    bl_idname = "anim.fcurve_bake_stepped"
+    bl_label = "Bake Stepped Modifier"
+    bl_description = "On every selected FCurve with a Stepped modifier, replace the modifier with actual keys"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context: Context) -> bool:
+        if not context.selected_visible_fcurves:
+            cls.poll_message_set("Select F-Curves to modify")
+            return False
+        return True
+
+    def execute(self, context: Context) -> set[str]:
+        frame_start = context.scene.frame_start
+        frame_end = context.scene.frame_end
+        for fcurve in context.selected_visible_fcurves:
+            self._apply_fcurve_steps(fcurve, frame_start, frame_end)
+        return {'FINISHED'}
+
+    def _apply_fcurve_steps(self, fcurve: FCurve, frame_start: int, frame_end: int) -> None:
+        mod = self._find_stepped_modifier(fcurve)
+        if not mod:
+            return
+
+        if mod.use_frame_start:
+            frame_start = max(mod.frame_start, frame_start)
+        if mod.use_frame_end:
+            frame_end = min(mod.frame_end, frame_end)
+
+        # Determine which keys to insert, without doing any modification to the
+        # FCurve itself.
+        step = 0
+        frame = 0
+        frames_to_insert: dict[float, float] = {}
+        while frame <= frame_end:
+            frame = mod.frame_offset + step * mod.frame_step
+            step += 1
+
+            if not (frame_start <= frame <= frame_end):
+                continue
+
+            frames_to_insert[frame] = fcurve.evaluate(frame)
+
+        # Insert the actual keys.
+        for frame, value in frames_to_insert.items():
+            kp = fcurve.keyframe_points.insert(frame=frame, value=value)
+            kp.type = 'BREAKDOWN'
+            kp.interpolation = 'CONSTANT'
+
+        mod.mute = True
+        fcurve.update()
+
+    def _find_stepped_modifier(self, fcurve: FCurve) -> Optional[FModifierStepped]:
+        for mod in fcurve.modifiers:
+            if isinstance(mod, FModifierStepped):
+                return mod
+        return None
+
+
 class PanelMixin:
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -588,6 +765,7 @@ class VIEW3D_PT_copy_global_transform_relative(PanelMixin, Panel):
         layout = self.layout
         scene = context.scene
         layout.prop(scene, 'addon_copy_global_transform_relative_ob', text="Object")
+        layout.operator("object.fix_to_camera")
 
 
 ### Messagebus subscription to monitor changes & refresh panels.
@@ -606,11 +784,17 @@ def _refresh_3d_panels():
 classes = (
     OBJECT_OT_copy_global_transform,
     OBJECT_OT_paste_transform,
+    OBJECT_OT_fix_to_camera,
+    ANIM_OT_fcurve_bake_stepped,
     VIEW3D_PT_copy_global_transform,
     VIEW3D_PT_copy_global_transform_mirror,
     VIEW3D_PT_copy_global_transform_relative,
 )
 _register, _unregister = bpy.utils.register_classes_factory(classes)
+
+
+def _draw_grapheditor_channels_menu(self: bpy.types.GRAPH_MT_channel, context: Context) -> None:
+    self.layout.operator('anim.fcurve_bake_stepped')
 
 
 def _register_message_bus() -> None:
@@ -636,6 +820,7 @@ def _on_blendfile_load_post(none: Any, other_none: Any) -> None:
 def register():
     _register()
     bpy.app.handlers.load_post.append(_on_blendfile_load_post)
+    bpy.types.GRAPH_MT_channel.append(_draw_grapheditor_channels_menu)
 
     # The mirror object & bone name are stored on the scene, and not on the
     # operator. This makes it possible to set up the operator for use in a
@@ -664,6 +849,7 @@ def unregister():
     _unregister()
     _unregister_message_bus()
     bpy.app.handlers.load_post.remove(_on_blendfile_load_post)
+    bpy.types.GRAPH_MT_channel.remove(_draw_grapheditor_channels_menu)
 
     del bpy.types.Scene.addon_copy_global_transform_mirror_ob
     del bpy.types.Scene.addon_copy_global_transform_mirror_bone
