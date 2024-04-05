@@ -3,7 +3,7 @@ Real pose copy addon.
 
 Encodes the matrices of the selected bones in JSON, and places that on the
 clipboard. This can be pasted as text into a text file, or, using this same
-addon, pasted onto another rig in another Blend file. Bones are mapepd
+addon, pasted onto another rig in another Blend file. Bones are mapped
 by name.
 """
 
