@@ -539,11 +539,41 @@ class TransformableObject:
         self.object.matrix_world = matrix
         AutoKeying.autokey_transformation(context, self.object)
 
+    # TODO: deduplicate code between this class and TransformableBone
+
+    @functools.cache
     def key_info(self) -> KeyInfo:
-        raise NotImplementedError()
+        keyinfo: KeyInfo = {}
+        for fcurve in self._my_fcurves():
+            for kp in fcurve.keyframe_points:
+                frame = kp.co.x
+                if kp.type == 'GENERATED' and frame in keyinfo:
+                    # Don't bother overwriting other key types.
+                    continue
+                keyinfo[frame] = kp.type
+        return keyinfo
 
     def remove_keys_of_type(self, key_type: str) -> None:
-        raise NotImplementedError()
+        for fcurve in self._my_fcurves():
+            to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
+            print(f"{self.object.name} / {fcurve.data_path}[{fcurve.array_index}]: removing {len(to_remove)} keys")
+            for kp in reversed(to_remove):
+                fcurve.keyframe_points.remove(kp, fast=True)
+            fcurve.keyframe_points.handles_recalc()
+
+    def _action(self) -> Optional[bpy.types.Action]:
+        adt = self.object.animation_data
+        if not adt:
+            return None
+        return adt.action
+
+    def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
+        action = self._action()
+        if not action:
+            return
+
+        # TODO: limit this to selected curves? Transforms only?
+        yield from action.fcurves
 
 
 @dataclasses.dataclass
@@ -600,6 +630,7 @@ class TransformableBone:
             return
 
         rna_prefix = f"{self.pose_bone.path_from_id()}."
+        # TODO: limit this to selected curves? Transforms only?
         for fcurve in action.fcurves:
             if fcurve.data_path.startswith(rna_prefix):
                 yield fcurve
