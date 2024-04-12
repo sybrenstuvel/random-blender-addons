@@ -45,6 +45,9 @@ class AutoKeying:
     Based on Rigify code by Alexander Gavrilov.
     """
 
+    # TODO: move this into a more suitable place.
+    keytype = 'KEYFRAME'
+
     @classmethod
     def keying_options(cls, context: Context) -> set[str]:
         """Retrieve the general keyframing options from user preferences."""
@@ -91,8 +94,9 @@ class AutoKeying:
         else:
             return [all(bone.lock_rotation)] * 4
 
-    @staticmethod
+    @classmethod
     def keyframe_channels(
+        cls,
         target: Union[Object, PoseBone],
         options: set[str],
         data_path: str,
@@ -103,13 +107,13 @@ class AutoKeying:
             return
 
         if not any(locks):
-            target.keyframe_insert(data_path, group=group, options=options)
+            target.keyframe_insert(data_path, group=group, options=options, keytype=cls.keytype)
             return
 
         for index, lock in enumerate(locks):
             if lock:
                 continue
-            target.keyframe_insert(data_path, index=index, group=group, options=options)
+            target.keyframe_insert(data_path, index=index, group=group, options=options, keytype=cls.keytype)
 
     @classmethod
     def key_transformation(
@@ -520,6 +524,9 @@ class Transformable(Protocol):
     def key_info(self) -> KeyInfo:
         return {}
 
+    def remove_keys_of_type(self, key_type: str) -> None:
+        pass
+
 
 @dataclasses.dataclass(frozen=True)
 class TransformableObject:
@@ -533,6 +540,9 @@ class TransformableObject:
         AutoKeying.autokey_transformation(context, self.object)
 
     def key_info(self) -> KeyInfo:
+        raise NotImplementedError()
+
+    def remove_keys_of_type(self, key_type: str) -> None:
         raise NotImplementedError()
 
 
@@ -560,15 +570,8 @@ class TransformableBone:
 
     @functools.cache
     def key_info(self) -> KeyInfo:
-        adt = self.arm_object.animation_data
-        if not adt or not adt.action:
-            return {}
-
-        rna_prefix = f"{self.pose_bone.path_from_id()}."
         keyinfo: KeyInfo = {}
-        for fcurve in adt.action.fcurves:
-            if not fcurve.data_path.startswith(rna_prefix):
-                continue
+        for fcurve in self._my_fcurves():
             for kp in fcurve.keyframe_points:
                 frame = kp.co.x
                 if kp.type == 'GENERATED' and frame in keyinfo:
@@ -577,12 +580,45 @@ class TransformableBone:
                 keyinfo[frame] = kp.type
         return keyinfo
 
+    def remove_keys_of_type(self, key_type: str) -> None:
+        for fcurve in self._my_fcurves():
+            to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
+            print(f"{self.pose_bone.name} / {fcurve.data_path}[{fcurve.array_index}]: removing {len(to_remove)} keys")
+            for kp in reversed(to_remove):
+                fcurve.keyframe_points.remove(kp, fast=True)
+            fcurve.keyframe_points.handles_recalc()
 
-class OBJECT_OT_fix_to_camera(Operator):
-    bl_idname = "object.fix_to_camera"
-    bl_label = "Fix to Scene Camera"
-    bl_description = "Fix the selected object/bone to the camera"
-    bl_options = {'REGISTER', 'UNDO'}
+    def _action(self) -> Optional[bpy.types.Action]:
+        adt = self.arm_object.animation_data
+        if not adt:
+            return None
+        return adt.action
+
+    def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
+        action = self._action()
+        if not action:
+            return
+
+        rna_prefix = f"{self.pose_bone.path_from_id()}."
+        for fcurve in action.fcurves:
+            if fcurve.data_path.startswith(rna_prefix):
+                yield fcurve
+
+
+class FixToCameraCommon:
+    """Common functionality for the Fix To Scene Camera operator + some others."""
+
+    # Operator method stubs to avoid PyLance/MyPy errors:
+    @classmethod
+    def poll_message_set(cls, message: str) -> None:
+        raise NotImplementedError()
+
+    def report(self, level: set[str], message: str) -> None:
+        raise NotImplementedError()
+
+    # Implement in subclass:
+    def _execute(self, context: Context, transformables: list[Transformable]) -> None:
+        raise NotImplementedError()
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -620,6 +656,13 @@ class OBJECT_OT_fix_to_camera(Operator):
     def _transformable_pbones(self, context: Context) -> list[Transformable]:
         return [TransformableBone(pose_bone=bone) for bone in context.selected_pose_bones]
 
+
+class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
+    bl_idname = "object.fix_to_camera"
+    bl_label = "Fix to Scene Camera"
+    bl_description = "Fix the selected object/bone to the camera"
+    bl_options = {'REGISTER', 'UNDO'}
+
     def _get_matrices(self, camera: Camera, transformables: list[Transformable]) -> dict[Transformable, Matrix]:
         camera_mat_inv = camera.matrix_world.inverted()
         return {t: camera_mat_inv @ t.matrix_world() for t in transformables}
@@ -632,21 +675,37 @@ class OBJECT_OT_fix_to_camera(Operator):
         camera_eval = scene.camera.evaluated_get(depsgraph)
         matrices = self._get_matrices(camera_eval, transformables)
 
-        for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
-            scene.frame_set(frame)
-            cam_matrix_world = camera_eval.matrix_world
-            camera_mat_inv = cam_matrix_world.inverted()
+        try:
+            AutoKeying.keytype = 'GENERATED'
 
-            for t, camera_rel_matrix in matrices.items():
-                key_info = t.key_info()
-                key_type = key_info.get(frame, "")
-                if key_type not in {"GENERATED", ""}:
-                    # Manually set key, remember the current camera-relative matrix.
-                    matrices[t] = camera_mat_inv @ t.matrix_world()
-                    continue
+            for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
+                scene.frame_set(frame)
+                cam_matrix_world = camera_eval.matrix_world
+                camera_mat_inv = cam_matrix_world.inverted()
 
-                # No key, or a generated one.
-                t.set_matrix_world(context, cam_matrix_world @ camera_rel_matrix)
+                for t, camera_rel_matrix in matrices.items():
+                    key_info = t.key_info()
+                    key_type = key_info.get(frame, "")
+                    if key_type not in {"GENERATED", ""}:
+                        # Manually set key, remember the current camera-relative matrix.
+                        matrices[t] = camera_mat_inv @ t.matrix_world()
+                        continue
+
+                    # No key, or a generated one.
+                    t.set_matrix_world(context, cam_matrix_world @ camera_rel_matrix)
+        finally:
+            AutoKeying.keytype = 'KEYFRAME'
+
+
+class OBJECT_OT_delete_fix_to_camera_keys(Operator, FixToCameraCommon):
+    bl_idname = "object.delete_fix_to_camera_keys"
+    bl_label = "Delete Generated Keys"
+    bl_description = "Delete all keys that were generated by the 'Fix to Scene Camera' operator"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def _execute(self, context: Context, transformables: list[Transformable]) -> None:
+        for t in transformables:
+            t.remove_keys_of_type('GENERATED')
 
 
 class ANIM_OT_fcurve_bake_stepped(Operator):
@@ -795,8 +854,12 @@ class VIEW3D_PT_copy_global_transform_relative(PanelMixin, Panel):
     def draw(self, context: Context) -> None:
         layout = self.layout
         scene = context.scene
+
         layout.prop(scene, 'addon_copy_global_transform_relative_ob', text="Object")
-        layout.operator("object.fix_to_camera")
+
+        row = layout.row(align=True)
+        row.operator("object.fix_to_camera")
+        row.operator("object.delete_fix_to_camera_keys", text="", icon='TRASH')
 
 
 ### Messagebus subscription to monitor changes & refresh panels.
@@ -816,6 +879,7 @@ classes = (
     OBJECT_OT_copy_global_transform,
     OBJECT_OT_paste_transform,
     OBJECT_OT_fix_to_camera,
+    OBJECT_OT_delete_fix_to_camera_keys,
     ANIM_OT_fcurve_bake_stepped,
     VIEW3D_PT_copy_global_transform,
     VIEW3D_PT_copy_global_transform_mirror,
