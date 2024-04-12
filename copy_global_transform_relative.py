@@ -24,7 +24,8 @@ bl_info = {
 
 import ast
 import dataclasses
-from typing import Iterable, Optional, Union, Any, Protocol
+import functools
+from typing import Iterable, Optional, Union, Any, Protocol, TypeAlias
 
 import bpy
 from bpy.types import Context, Object, Operator, Panel, PoseBone, UILayout, FCurve, Camera, FModifierStepped
@@ -502,6 +503,11 @@ class OBJECT_OT_paste_transform(Operator):
             context.scene.frame_set(int(current_frame), subframe=current_frame % 1.0)
 
 
+# Mapping from frame number to the dominant key type.
+# GENERATED is the only recessive key type, others are dominant.
+KeyInfo: TypeAlias = dict[float, str]
+
+
 class Transformable(Protocol):
     """Interface for a bone or an object."""
 
@@ -510,6 +516,9 @@ class Transformable(Protocol):
 
     def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
         pass
+
+    def key_info(self) -> KeyInfo:
+        return {}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -523,6 +532,9 @@ class TransformableObject:
         self.object.matrix_world = matrix
         AutoKeying.autokey_transformation(context, self.object)
 
+    def key_info(self) -> KeyInfo:
+        raise NotImplementedError()
+
 
 @dataclasses.dataclass
 class TransformableBone:
@@ -530,17 +542,7 @@ class TransformableBone:
     pose_bone: PoseBone
 
     def __init__(self, pose_bone: PoseBone) -> None:
-        # Figure out the owning object from the pose bone's RNA path. This is
-        # necessary as `context.selected_pose_bones` can return bones from any
-        # armature object, not just the active one.
-        rna_path = repr(pose_bone)
-        index = rna_path.index('.pose.bones')
-        arm_ob_rna_path = rna_path[:index].removeprefix('bpy.data.')
-
-        # Work around issue #120140.
-        arm_ob_rna_path = arm_ob_rna_path.replace("'", '"')
-
-        self.arm_object = bpy.data.path_resolve(arm_ob_rna_path)
+        self.arm_object = pose_bone.id_data
         self.pose_bone = pose_bone
 
     def matrix_world(self) -> Matrix:
@@ -556,11 +558,30 @@ class TransformableBone:
     def __hash__(self) -> int:
         return hash(self.pose_bone.as_pointer())
 
+    @functools.cache
+    def key_info(self) -> KeyInfo:
+        adt = self.arm_object.animation_data
+        if not adt or not adt.action:
+            return {}
+
+        rna_prefix = f"{self.pose_bone.path_from_id()}."
+        keyinfo: KeyInfo = {}
+        for fcurve in adt.action.fcurves:
+            if not fcurve.data_path.startswith(rna_prefix):
+                continue
+            for kp in fcurve.keyframe_points:
+                frame = kp.co.x
+                if kp.type == 'GENERATED' and frame in keyinfo:
+                    # Don't bother overwriting other key types.
+                    continue
+                keyinfo[frame] = kp.type
+        return keyinfo
+
 
 class OBJECT_OT_fix_to_camera(Operator):
     bl_idname = "object.fix_to_camera"
     bl_label = "Fix to Scene Camera"
-    bl_description = ""
+    bl_description = "Fix the selected object/bone to the camera"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -614,7 +635,17 @@ class OBJECT_OT_fix_to_camera(Operator):
         for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
             scene.frame_set(frame)
             cam_matrix_world = camera_eval.matrix_world
+            camera_mat_inv = cam_matrix_world.inverted()
+
             for t, camera_rel_matrix in matrices.items():
+                key_info = t.key_info()
+                key_type = key_info.get(frame, "")
+                if key_type not in {"GENERATED", ""}:
+                    # Manually set key, remember the current camera-relative matrix.
+                    matrices[t] = camera_mat_inv @ t.matrix_world()
+                    continue
+
+                # No key, or a generated one.
                 t.set_matrix_world(context, cam_matrix_world @ camera_rel_matrix)
 
 
