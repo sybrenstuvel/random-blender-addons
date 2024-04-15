@@ -25,8 +25,6 @@ bl_info = {
 import ast
 import abc
 import contextlib
-import dataclasses
-import functools
 from typing import Iterable, Optional, Union, Any, TypeAlias, Iterator
 
 import bpy
@@ -239,6 +237,12 @@ def _selected_keyframes_in_action(object: Object, rna_path_prefix: str) -> list[
     return sorted(keyframes)
 
 
+def _copy_matrix_to_clipboard(window_manager: bpy.types.WindowManager, matrix: Matrix) -> None:
+    rows = [f"    {tuple(row)!r}," for row in matrix]
+    as_string = "\n".join(rows)
+    window_manager.clipboard = f"Matrix((\n{as_string}\n))"
+
+
 class OBJECT_OT_copy_global_transform(Operator):
     bl_idname = "object.copy_global_transform"
     bl_label = "Copy Global Transform"
@@ -254,14 +258,28 @@ class OBJECT_OT_copy_global_transform(Operator):
 
     def execute(self, context: Context) -> set[str]:
         mat = get_matrix(context)
+        _copy_matrix_to_clipboard(context.window_manager, mat)
+        return {'FINISHED'}
 
+
+class OBJECT_OT_copy_relative_transform(Operator):
+    bl_idname = "object.copy_relative_transform"
+    bl_label = "Copy Relative Transform"
+    bl_description = "Copies the matrix of the currently active object or pose bone to the clipboard. Uses matrices relative to a specific object"
+    # This operator cannot be un-done because it manipulates data outside Blender.
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context: Context) -> bool:
         rel_ob = context.scene.addon_copy_global_transform_relative_ob
-        if rel_ob:
-            mat = rel_ob.matrix_world.inverted() @ mat
+        if not rel_ob:
+            return False
+        return bool(context.active_pose_bone) or bool(context.active_object)
 
-        rows = [f"    {tuple(row)!r}," for row in mat]
-        as_string = "\n".join(rows)
-        context.window_manager.clipboard = f"Matrix((\n{as_string}\n))"
+    def execute(self, context: Context) -> set[str]:
+        rel_ob = context.scene.addon_copy_global_transform_relative_ob
+        mat = rel_ob.matrix_world.inverted() @ get_matrix(context)
+        _copy_matrix_to_clipboard(context.window_manager, mat)
         return {'FINISHED'}
 
 
@@ -324,6 +342,12 @@ class OBJECT_OT_paste_transform(Operator):
         name="Rotation Axis",
         description="Coordinate axis used to mirror the rotation part of the transform",
         default='z',
+    )
+
+    use_relative: bpy.props.BoolProperty(  # type: ignore
+        name="Use Relative Paste",
+        description="When pasting, assume the pasted matrix is relative to another object (set in the user interface)",
+        default=False,
     )
 
     @classmethod
@@ -397,12 +421,15 @@ class OBJECT_OT_paste_transform(Operator):
         return matrix
 
     def _relative_to_world(self, context: Context, matrix: Matrix) -> Matrix:
+        if not self.use_relative:
+            return matrix
+
         rel_ob = context.scene.addon_copy_global_transform_relative_ob
         if not rel_ob:
             return matrix
 
-        rel_ob = rel_ob.evaluated_get(context.view_layer.depsgraph)
-        return rel_ob.matrix_world @ matrix
+        rel_ob_eval = rel_ob.evaluated_get(context.view_layer.depsgraph)
+        return rel_ob_eval.matrix_world @ matrix
 
     def _mirror_matrix(self, context: Context, matrix: Matrix) -> Matrix:
         mirror_ob = context.scene.addon_copy_global_transform_mirror_ob
@@ -689,7 +716,7 @@ class FixToCameraCommon:
 class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
     bl_idname = "object.fix_to_camera"
     bl_label = "Fix to Scene Camera"
-    bl_description = "Fix the selected object/bone to the camera"
+    bl_description = "Generate new keys to fix the selected object/bone to the camera on unkeyed frames"
     bl_options = {'REGISTER', 'UNDO'}
 
     def _get_matrices(self, camera: Camera, transformables: list[Transformable]) -> dict[Transformable, Matrix]:
@@ -819,22 +846,28 @@ class VIEW3D_PT_copy_global_transform(PanelMixin, Panel):
         paste_props.method = 'CURRENT'
         paste_props.use_mirror = True
 
-        wants_autokey_col = paste_col.column(align=True)
+        wants_autokey_col = paste_col.column(align=False)
         has_autokey = context.scene.tool_settings.use_keyframe_insert_auto
         wants_autokey_col.enabled = has_autokey
         if not has_autokey:
             wants_autokey_col.label(text="These require auto-key:")
 
-        wants_autokey_col.operator(
+        paste_col = wants_autokey_col.column(align=True)
+        paste_col.operator(
             "object.paste_transform",
             text="Paste to Selected Keys",
             icon='PASTEDOWN',
         ).method = 'EXISTING_KEYS'
-        wants_autokey_col.operator(
+        paste_col.operator(
             "object.paste_transform",
             text="Paste and Bake",
             icon='PASTEDOWN',
         ).method = 'BAKE'
+
+        # Fix to Scene Camera:
+        row = wants_autokey_col.row(align=True)
+        row.operator("object.fix_to_camera")
+        row.operator("object.delete_fix_to_camera_keys", text="", icon='TRASH')
 
 
 class VIEW3D_PT_copy_global_transform_mirror(PanelMixin, Panel):
@@ -874,18 +907,33 @@ class VIEW3D_PT_copy_global_transform_mirror(PanelMixin, Panel):
 
 
 class VIEW3D_PT_copy_global_transform_relative(PanelMixin, Panel):
-    bl_label = "Relative Options"
+    bl_label = "Relative"
     bl_parent_id = "VIEW3D_PT_copy_global_transform"
 
     def draw(self, context: Context) -> None:
         layout = self.layout
         scene = context.scene
 
-        layout.prop(scene, 'addon_copy_global_transform_relative_ob', text="Object")
+        # Copy/Paste relative to some object:
+        copy_paste_sub = layout.column(align=False)
+        has_relative_ob = bool(scene.addon_copy_global_transform_relative_ob)
+        copy_paste_sub.label(text="Work Relative to some Object")
+        copy_paste_sub.prop(scene, 'addon_copy_global_transform_relative_ob', text="Object")
+        copy_sub = copy_paste_sub.column(align=True)
+        copy_sub.enabled = has_relative_ob
+        copy_sub.operator("object.copy_relative_transform", text="Copy", icon='COPYDOWN')
 
-        row = layout.row(align=True)
-        row.operator("object.fix_to_camera")
-        row.operator("object.delete_fix_to_camera_keys", text="", icon='TRASH')
+        paste_col = copy_paste_sub.column(align=True)
+        paste_col.enabled = has_relative_ob
+        paste_row = paste_col.row(align=True)
+        paste_props = paste_row.operator("object.paste_transform", text="Paste", icon='PASTEDOWN')
+        paste_props.method = 'CURRENT'
+        paste_props.use_mirror = False
+        paste_props.use_relative = True
+        paste_props = paste_row.operator("object.paste_transform", text="Mirrored", icon='PASTEFLIPDOWN')
+        paste_props.method = 'CURRENT'
+        paste_props.use_mirror = True
+        paste_props.use_relative = True
 
 
 ### Messagebus subscription to monitor changes & refresh panels.
@@ -903,10 +951,11 @@ def _refresh_3d_panels():
 
 classes = (
     OBJECT_OT_copy_global_transform,
+    OBJECT_OT_copy_relative_transform,
     OBJECT_OT_paste_transform,
     OBJECT_OT_fix_to_camera,
     OBJECT_OT_delete_fix_to_camera_keys,
-    ANIM_OT_fcurve_bake_stepped,
+    # ANIM_OT_fcurve_bake_stepped,
     VIEW3D_PT_copy_global_transform,
     VIEW3D_PT_copy_global_transform_mirror,
     VIEW3D_PT_copy_global_transform_relative,
