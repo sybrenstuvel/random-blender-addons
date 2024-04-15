@@ -13,7 +13,7 @@ It's called "global" to avoid confusion with the Blender World data-block.
 bl_info = {
     "name": "Copy Global Transform (relative)",
     "author": "Sybren A. Stüvel",
-    "version": (2, 2),
+    "version": (3, 0),
     "blender": (4, 1, 0),
     "location": "N-panel in the 3D Viewport",
     "category": "Animation",
