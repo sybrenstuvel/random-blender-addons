@@ -620,11 +620,13 @@ class Transformable(metaclass=abc.ABCMeta):
         self._key_info_cache = keyinfo
         return keyinfo
 
-    def remove_keys_of_type(self, key_type: str) -> None:
+    def remove_keys_of_type(self, key_type: str, *, frame_start=float("-inf"), frame_end=float("inf")) -> None:
         self._key_info_cache = None
 
         for fcurve in self._my_fcurves():
-            to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
+            to_remove = [
+                kp for kp in fcurve.keyframe_points if kp.type == key_type and (frame_start <= kp.co.x <= frame_end)
+            ]
             for kp in reversed(to_remove):
                 fcurve.keyframe_points.remove(kp, fast=True)
             fcurve.keyframe_points.handles_recalc()
@@ -781,7 +783,15 @@ class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
 
         scene.frame_set(scene.frame_start)
         camera_eval = scene.camera.evaluated_get(depsgraph)
+        last_camera_name = scene.camera.name
         matrices = self._get_matrices(camera_eval, transformables)
+
+        if scene.use_preview_range:
+            frame_start = scene.frame_preview_start
+            frame_end = scene.frame_preview_end
+        else:
+            frame_start = scene.frame_start
+            frame_end = scene.frame_end
 
         with AutoKeying.options(
             keytype=self.keytype,
@@ -790,10 +800,18 @@ class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
             use_scale=self.use_scale,
             force_autokey=True,
         ):
-            for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
+            for frame in range(frame_start, frame_end + scene.frame_step, scene.frame_step):
                 scene.frame_set(frame)
+
+                camera_eval = scene.camera.evaluated_get(depsgraph)
                 cam_matrix_world = camera_eval.matrix_world
                 camera_mat_inv = cam_matrix_world.inverted()
+
+                if scene.camera.name != last_camera_name:
+                    # The scene camera changed, so the previous
+                    # relative-to-camera matrices can no longer be used.
+                    matrices = self._get_matrices(camera_eval, transformables)
+                    last_camera_name = scene.camera.name
 
                 for t, camera_rel_matrix in matrices.items():
                     key_info = t.key_info()
@@ -814,8 +832,16 @@ class OBJECT_OT_delete_fix_to_camera_keys(Operator, FixToCameraCommon):
     bl_options = {'REGISTER', 'UNDO'}
 
     def _execute(self, context: Context, transformables: list[Transformable]) -> None:
+        scene = context.scene
+        if scene.use_preview_range:
+            frame_start = scene.frame_preview_start
+            frame_end = scene.frame_preview_end
+        else:
+            frame_start = scene.frame_start
+            frame_end = scene.frame_end
+
         for t in transformables:
-            t.remove_keys_of_type(self.keytype)
+            t.remove_keys_of_type(self.keytype, frame_start=frame_start, frame_end=frame_end)
 
 
 class ANIM_OT_fcurve_bake_stepped(Operator):
