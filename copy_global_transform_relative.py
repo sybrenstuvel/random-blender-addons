@@ -526,6 +526,9 @@ KeyInfo: TypeAlias = dict[float, str]
 class Transformable(metaclass=abc.ABCMeta):
     """Interface for a bone or an object."""
 
+    def __init__(self) -> None:
+        self._key_info_cache: Optional[KeyInfo] = None
+
     @abc.abstractmethod
     def matrix_world(self) -> Matrix:
         pass
@@ -538,8 +541,10 @@ class Transformable(metaclass=abc.ABCMeta):
     def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
         pass
 
-    @functools.cache
     def key_info(self) -> KeyInfo:
+        if self._key_info_cache is not None:
+            return self._key_info_cache
+
         keyinfo: KeyInfo = {}
         for fcurve in self._my_fcurves():
             for kp in fcurve.keyframe_points:
@@ -548,9 +553,13 @@ class Transformable(metaclass=abc.ABCMeta):
                     # Don't bother overwriting other key types.
                     continue
                 keyinfo[frame] = kp.type
+
+        self._key_info_cache = keyinfo
         return keyinfo
 
     def remove_keys_of_type(self, key_type: str) -> None:
+        self._key_info_cache = None
+
         for fcurve in self._my_fcurves():
             to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
             for kp in reversed(to_remove):
@@ -558,9 +567,12 @@ class Transformable(metaclass=abc.ABCMeta):
             fcurve.keyframe_points.handles_recalc()
 
 
-@dataclasses.dataclass(frozen=True)
 class TransformableObject(Transformable):
     object: Object
+
+    def __init__(self, object: Object) -> None:
+        super().__init__()
+        self.object = object
 
     def matrix_world(self) -> Matrix:
         return self.object.matrix_world
@@ -568,6 +580,9 @@ class TransformableObject(Transformable):
     def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
         self.object.matrix_world = matrix
         AutoKeying.autokey_transformation(context, self.object)
+
+    def __hash__(self) -> int:
+        return hash(self.object.as_pointer())
 
     def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
         action = self._action()
@@ -580,12 +595,12 @@ class TransformableObject(Transformable):
         return adt and adt.action
 
 
-@dataclasses.dataclass
 class TransformableBone(Transformable):
     arm_object: Object
     pose_bone: PoseBone
 
     def __init__(self, pose_bone: PoseBone) -> None:
+        super().__init__()
         self.arm_object = pose_bone.id_data
         self.pose_bone = pose_bone
 
@@ -698,6 +713,7 @@ class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
                 for t, camera_rel_matrix in matrices.items():
                     key_info = t.key_info()
                     key_type = key_info.get(frame, "")
+                    print(f"{frame}: {key_type=}")
                     if key_type not in {self.keytype, ""}:
                         # Manually set key, remember the current camera-relative matrix.
                         matrices[t] = camera_mat_inv @ t.matrix_world()
