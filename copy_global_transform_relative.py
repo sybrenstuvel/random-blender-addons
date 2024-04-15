@@ -23,9 +23,11 @@ bl_info = {
 }
 
 import ast
+import abc
+import contextlib
 import dataclasses
 import functools
-from typing import Iterable, Optional, Union, Any, Protocol, TypeAlias
+from typing import Iterable, Optional, Union, Any, TypeAlias, Iterator
 
 import bpy
 from bpy.types import Context, Object, Operator, Panel, PoseBone, UILayout, FCurve, Camera, FModifierStepped
@@ -45,8 +47,17 @@ class AutoKeying:
     Based on Rigify code by Alexander Gavrilov.
     """
 
-    # TODO: move this into a more suitable place.
-    keytype = 'KEYFRAME'
+    _keytype = 'KEYFRAME'
+
+    @classmethod
+    @contextlib.contextmanager
+    def keytype(cls, the_keytype: str) -> Iterator[None]:
+        default_keytype = cls._keytype
+        try:
+            cls._keytype = the_keytype
+            yield
+        finally:
+            cls._keytype = default_keytype
 
     @classmethod
     def keying_options(cls, context: Context) -> set[str]:
@@ -107,13 +118,13 @@ class AutoKeying:
             return
 
         if not any(locks):
-            target.keyframe_insert(data_path, group=group, options=options, keytype=cls.keytype)
+            target.keyframe_insert(data_path, group=group, options=options, keytype=cls._keytype)
             return
 
         for index, lock in enumerate(locks):
             if lock:
                 continue
-            target.keyframe_insert(data_path, index=index, group=group, options=options, keytype=cls.keytype)
+            target.keyframe_insert(data_path, index=index, group=group, options=options, keytype=cls._keytype)
 
     @classmethod
     def key_transformation(
@@ -512,34 +523,20 @@ class OBJECT_OT_paste_transform(Operator):
 KeyInfo: TypeAlias = dict[float, str]
 
 
-class Transformable(Protocol):
+class Transformable(metaclass=abc.ABCMeta):
     """Interface for a bone or an object."""
 
+    @abc.abstractmethod
     def matrix_world(self) -> Matrix:
         pass
 
+    @abc.abstractmethod
     def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
         pass
 
-    def key_info(self) -> KeyInfo:
-        return {}
-
-    def remove_keys_of_type(self, key_type: str) -> None:
+    @abc.abstractmethod
+    def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
         pass
-
-
-@dataclasses.dataclass(frozen=True)
-class TransformableObject:
-    object: Object
-
-    def matrix_world(self) -> Matrix:
-        return self.object.matrix_world
-
-    def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
-        self.object.matrix_world = matrix
-        AutoKeying.autokey_transformation(context, self.object)
-
-    # TODO: deduplicate code between this class and TransformableBone
 
     @functools.cache
     def key_info(self) -> KeyInfo:
@@ -556,28 +553,35 @@ class TransformableObject:
     def remove_keys_of_type(self, key_type: str) -> None:
         for fcurve in self._my_fcurves():
             to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
-            print(f"{self.object.name} / {fcurve.data_path}[{fcurve.array_index}]: removing {len(to_remove)} keys")
             for kp in reversed(to_remove):
                 fcurve.keyframe_points.remove(kp, fast=True)
             fcurve.keyframe_points.handles_recalc()
 
-    def _action(self) -> Optional[bpy.types.Action]:
-        adt = self.object.animation_data
-        if not adt:
-            return None
-        return adt.action
+
+@dataclasses.dataclass(frozen=True)
+class TransformableObject(Transformable):
+    object: Object
+
+    def matrix_world(self) -> Matrix:
+        return self.object.matrix_world
+
+    def set_matrix_world(self, context: Context, matrix: Matrix) -> None:
+        self.object.matrix_world = matrix
+        AutoKeying.autokey_transformation(context, self.object)
 
     def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
         action = self._action()
         if not action:
             return
-
-        # TODO: limit this to selected curves? Transforms only?
         yield from action.fcurves
+
+    def _action(self) -> Optional[bpy.types.Action]:
+        adt = self.object.animation_data
+        return adt and adt.action
 
 
 @dataclasses.dataclass
-class TransformableBone:
+class TransformableBone(Transformable):
     arm_object: Object
     pose_bone: PoseBone
 
@@ -598,46 +602,25 @@ class TransformableBone:
     def __hash__(self) -> int:
         return hash(self.pose_bone.as_pointer())
 
-    @functools.cache
-    def key_info(self) -> KeyInfo:
-        keyinfo: KeyInfo = {}
-        for fcurve in self._my_fcurves():
-            for kp in fcurve.keyframe_points:
-                frame = kp.co.x
-                if kp.type == 'GENERATED' and frame in keyinfo:
-                    # Don't bother overwriting other key types.
-                    continue
-                keyinfo[frame] = kp.type
-        return keyinfo
-
-    def remove_keys_of_type(self, key_type: str) -> None:
-        for fcurve in self._my_fcurves():
-            to_remove = [kp for kp in fcurve.keyframe_points if kp.type == key_type]
-            print(f"{self.pose_bone.name} / {fcurve.data_path}[{fcurve.array_index}]: removing {len(to_remove)} keys")
-            for kp in reversed(to_remove):
-                fcurve.keyframe_points.remove(kp, fast=True)
-            fcurve.keyframe_points.handles_recalc()
-
-    def _action(self) -> Optional[bpy.types.Action]:
-        adt = self.arm_object.animation_data
-        if not adt:
-            return None
-        return adt.action
-
     def _my_fcurves(self) -> Iterable[bpy.types.FCurve]:
         action = self._action()
         if not action:
             return
 
         rna_prefix = f"{self.pose_bone.path_from_id()}."
-        # TODO: limit this to selected curves? Transforms only?
         for fcurve in action.fcurves:
             if fcurve.data_path.startswith(rna_prefix):
                 yield fcurve
 
+    def _action(self) -> Optional[bpy.types.Action]:
+        adt = self.arm_object.animation_data
+        return adt and adt.action
+
 
 class FixToCameraCommon:
-    """Common functionality for the Fix To Scene Camera operator + some others."""
+    """Common functionality for the Fix To Scene Camera operator + its 'delete' button."""
+
+    keytype = 'GENERATED'
 
     # Operator method stubs to avoid PyLance/MyPy errors:
     @classmethod
@@ -706,9 +689,7 @@ class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
         camera_eval = scene.camera.evaluated_get(depsgraph)
         matrices = self._get_matrices(camera_eval, transformables)
 
-        try:
-            AutoKeying.keytype = 'GENERATED'
-
+        with AutoKeying.keytype(self.keytype):
             for frame in range(scene.frame_start, scene.frame_end + scene.frame_step, scene.frame_step):
                 scene.frame_set(frame)
                 cam_matrix_world = camera_eval.matrix_world
@@ -717,15 +698,13 @@ class OBJECT_OT_fix_to_camera(Operator, FixToCameraCommon):
                 for t, camera_rel_matrix in matrices.items():
                     key_info = t.key_info()
                     key_type = key_info.get(frame, "")
-                    if key_type not in {"GENERATED", ""}:
+                    if key_type not in {self.keytype, ""}:
                         # Manually set key, remember the current camera-relative matrix.
                         matrices[t] = camera_mat_inv @ t.matrix_world()
                         continue
 
-                    # No key, or a generated one.
+                    # No key, or a generated one. Overwrite it with a new transform.
                     t.set_matrix_world(context, cam_matrix_world @ camera_rel_matrix)
-        finally:
-            AutoKeying.keytype = 'KEYFRAME'
 
 
 class OBJECT_OT_delete_fix_to_camera_keys(Operator, FixToCameraCommon):
@@ -736,7 +715,7 @@ class OBJECT_OT_delete_fix_to_camera_keys(Operator, FixToCameraCommon):
 
     def _execute(self, context: Context, transformables: list[Transformable]) -> None:
         for t in transformables:
-            t.remove_keys_of_type('GENERATED')
+            t.remove_keys_of_type(self.keytype)
 
 
 class ANIM_OT_fcurve_bake_stepped(Operator):
@@ -772,7 +751,7 @@ class ANIM_OT_fcurve_bake_stepped(Operator):
         # Determine which keys to insert, without doing any modification to the
         # FCurve itself.
         step = 0
-        frame = 0
+        frame = 0.0
         frames_to_insert: dict[float, float] = {}
         while frame <= frame_end:
             frame = mod.frame_offset + step * mod.frame_step
