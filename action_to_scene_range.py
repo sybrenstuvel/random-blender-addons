@@ -12,7 +12,7 @@ its length.
 bl_info = {
     "name": "Action to Scene Range",
     "author": "Sybren A. Stüvel",
-    "version": (1, 2),
+    "version": (1, 3),
     "blender": (4, 1, 0),
     "location": "Automatic, no interface available",
     "category": "Animation",
@@ -33,7 +33,7 @@ class ACTION_OT_to_scene_range(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
-        if context.space_data.mode != 'ACTION':
+        if not _is_action_editor(context):
             return False
 
         action = context.space_data.action
@@ -41,6 +41,7 @@ class ACTION_OT_to_scene_range(bpy.types.Operator):
 
         if not action or not scene:
             return False
+
         if _get_range_action(action) == _get_range_scene(scene):
             cls.poll_message_set("Scene already at Action range")
             return False
@@ -122,20 +123,22 @@ def _on_blendfile_load_post(none: Any, other_none: Any) -> None:
     _register_message_bus()
 
 
-def _draw_header_button(self, context) -> None:
-    if context.space_data.mode != 'ACTION':
+def _draw_header_button(self, context: bpy.types.Context) -> None:
+    if not _is_action_editor(context):
         return
     self.layout.operator("action.to_scene_range", text="", icon='PREVIEW_RANGE')
 
 
-def _draw_panel_button(self, context) -> None:
-    if context.space_data.mode != 'ACTION':
-        return
+def _draw_panel_button(self, context: bpy.types.Context) -> None:
     range_name = {
         False: 'Scene',
         True: 'Preview',
     }[context.scene.use_preview_range]
     self.layout.operator("action.to_scene_range", text=f"Action → {range_name} Range", icon='PREVIEW_RANGE')
+
+
+def _is_action_editor(context: bpy.types.Context) -> bool:
+    return context.space_data and context.space_data.type == 'DOPESHEET_EDITOR' and context.space_data.mode == 'ACTION'
 
 
 def register():
