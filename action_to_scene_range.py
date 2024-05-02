@@ -12,7 +12,7 @@ its length.
 bl_info = {
     "name": "Action to Scene Range",
     "author": "Sybren A. Stüvel",
-    "version": (1, 0),
+    "version": (1, 1),
     "blender": (4, 1, 0),
     "location": "Automatic, no interface available",
     "category": "Animation",
