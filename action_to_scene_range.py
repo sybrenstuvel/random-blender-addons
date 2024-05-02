@@ -12,7 +12,7 @@ its length.
 bl_info = {
     "name": "Action to Scene Range",
     "author": "Sybren A. Stüvel",
-    "version": (1, 3),
+    "version": (1, 4),
     "blender": (4, 1, 0),
     "location": "Automatic, no interface available",
     "category": "Animation",
@@ -30,16 +30,21 @@ class ACTION_OT_to_scene_range(bpy.types.Operator):
     bl_idname = "action.to_scene_range"
     bl_label = "Action to Scene Range"
     bl_description = "Set the Scene (preview) range to the Action's frame range"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
-        if not _is_action_editor(context):
+        if not _is_dopesheet_editor(context):
             return False
 
-        action = context.space_data.action
+        action = cls._get_action(context)
         scene = context.scene
 
-        if not action or not scene:
+        if not action:
+            cls.poll_message_set("I don't know which Action you want me to look at")
+            return False
+        if not scene:
+            cls.poll_message_set("I don't know which Scene you want me to update")
             return False
 
         if _get_range_action(action) == _get_range_scene(scene):
@@ -48,13 +53,20 @@ class ACTION_OT_to_scene_range(bpy.types.Operator):
         return True
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        action = context.space_data.action
+        action = self._get_action(context)
         scene = context.scene
 
         start, end = _action_to_scene_range(action, scene)
         self.report({'INFO'}, f"Changed scene range to {start}-{end}")
 
         return {'FINISHED'}
+
+    @staticmethod
+    def _get_action(context: bpy.types.Context) -> bpy.types.Action | None:
+        action = getattr(context.space_data, 'action', None)
+        if action:
+            return action
+        return getattr(context, 'active_action', None)
 
 
 classes = (ACTION_OT_to_scene_range,)
@@ -137,8 +149,12 @@ def _draw_panel_button(self, context: bpy.types.Context) -> None:
     self.layout.operator("action.to_scene_range", text=f"Action → {range_name} Range", icon='PREVIEW_RANGE')
 
 
+def _is_dopesheet_editor(context: bpy.types.Context) -> bool:
+    return context.space_data and context.space_data.type == 'DOPESHEET_EDITOR'
+
+
 def _is_action_editor(context: bpy.types.Context) -> bool:
-    return context.space_data and context.space_data.type == 'DOPESHEET_EDITOR' and context.space_data.mode == 'ACTION'
+    return _is_dopesheet_editor(context) and context.space_data.mode == 'ACTION'
 
 
 def register():
