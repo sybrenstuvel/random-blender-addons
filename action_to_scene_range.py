@@ -5,16 +5,18 @@
 """
 Action to Scene Range
 
-When any Action is assigned to an object, update the Scene frame range to match
-its length.
+When an Action is assigned to an object, and that Action has 'Manual Frame
+Range' checked, update the Scene frame range to match its length.
+
+If the Scene has the preview range active, update the preview range instead.
 """
 
 bl_info = {
     "name": "Action to Scene Range",
     "author": "Sybren A. Stüvel",
-    "version": (1, 4),
+    "version": (1, 5),
     "blender": (4, 1, 0),
-    "location": "Automatic, no interface available",
+    "location": "Action Editor",
     "category": "Animation",
     "support": 'COMMUNITY',
     "doc_url": "",
@@ -105,6 +107,10 @@ def _on_action_change() -> None:
         return
     action = ob.animation_data.action
     if not action:
+        return
+
+    if not action.use_frame_range:
+        # Only do automatic syncing on Actions that have 'Manual Frame Range' checked.
         return
 
     frame_start, frame_end = _action_to_scene_range(action, bpy.context.scene)
