@@ -198,7 +198,7 @@ def on_load_post(filename: str) -> None:
 
 
 class YouAreAutosavePreferences(bpy.types.AddonPreferences):
-    bl_idname = "you_are_autosave"
+    bl_idname = __package__
 
     nag_start_time: bpy.props.IntProperty(  # type: ignore
         name="Nag Start Time (minutes)",
