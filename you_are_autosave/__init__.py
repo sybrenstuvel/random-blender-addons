@@ -47,7 +47,7 @@ def secs_since_last_save() -> float:
 
 
 def prefs() -> "YouAreAutosavePreferences":
-    return bpy.context.preferences.addons['you_are_autosave'].preferences
+    return bpy.context.preferences.addons[__package__].preferences
 
 
 def start_nagging_in_sec() -> float:
