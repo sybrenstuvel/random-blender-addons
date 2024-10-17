@@ -220,7 +220,7 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         subtype="TIME",
     )
 
-    color: bpy.props.FloatVectorProperty(
+    color: bpy.props.FloatVectorProperty(  # type: ignore
         name="Color",
         min=0,
         max=1,
