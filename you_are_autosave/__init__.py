@@ -103,13 +103,15 @@ def pluralize(count: float, singular: str) -> str:
 
 
 def draw_callback_px():
+    context = bpy.context
+
     font_id = 0  # XXX, need to find out how best to get this.
 
     color = prefs().color
-    width = bpy.context.region.width
-    height = bpy.context.region.height
+    width = context.region.width
+    height = context.region.height
 
-    if bpy.context.space_data.show_region_ui:
+    if context.space_data.show_region_ui:
         width -= 29
 
     secs_since_save = secs_since_last_save()
@@ -126,8 +128,9 @@ def draw_callback_px():
         ago = f"{secs:.0f} seconds"
 
     # draw some text
+    text_scale = context.preferences.system.pixel_size * context.preferences.view.ui_scale
     blf.position(font_id, width * 0.3, 12, 0)
-    blf.size(font_id, 14.0)
+    blf.size(font_id, 11.0 * text_scale)
     blf.color(font_id, *color, 0.5)
     blf.draw(font_id, f"Last saved {ago} ago")
 
@@ -183,16 +186,16 @@ def draw_callback_px():
 
 @bpy.app.handlers.persistent
 def on_save_post(filename: str) -> None:
-    global last_save_timestamp
-
-    last_save_timestamp = time.monotonic()
-    clear_warning()
+    _reset_timer()
 
 
 @bpy.app.handlers.persistent
 def on_load_post(filename: str) -> None:
-    global last_save_timestamp
+    _reset_timer()
 
+
+def _reset_timer() -> None:
+    global last_save_timestamp
     last_save_timestamp = time.monotonic()
     clear_warning()
 
