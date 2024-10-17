@@ -131,12 +131,14 @@ def draw_callback_px():
         secs = round(secs_since_save)
         ago = f"{secs:.0f} seconds"
 
+    operation = "Last saved" if bpy.data.filepath else "Created"
+
     # draw some text
     text_scale = context.preferences.system.pixel_size * context.preferences.view.ui_scale
     blf.position(font_id, width * 0.3, 12, 0)
     blf.size(font_id, 11.0 * text_scale)
     blf.color(font_id, *color, 0.5)
-    blf.draw(font_id, f"Last saved {ago} ago")
+    blf.draw(font_id, f"{operation} {ago} ago")
 
     # Draw a line
     shader = gpu.shader.from_builtin('UNIFORM_COLOR')
@@ -273,7 +275,6 @@ def register() -> None:
 
 
 def unregister() -> None:
-    clear_warning()
     bpy.app.timers.unregister(check_last_save_timestamp)
 
     try:
@@ -289,4 +290,5 @@ def unregister() -> None:
     except ValueError:
         pass
 
+    clear_warning()
     _unregister()
