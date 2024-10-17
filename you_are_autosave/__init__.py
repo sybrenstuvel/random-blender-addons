@@ -271,7 +271,6 @@ def register() -> None:
     bpy.app.handlers.load_factory_startup_post.append(on_load_post)
 
     bpy.app.timers.register(check_last_save_timestamp, first_interval=0, persistent=True)
-    check_last_save_timestamp()
 
 
 def unregister() -> None:
