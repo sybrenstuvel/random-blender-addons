@@ -59,8 +59,12 @@ def full_problem_after_sec() -> float:
 
 
 def check_last_save_timestamp() -> float:
+    if not prefs().include_unsaved and not bpy.data.filepath:
+        clear_warning()
+        return check_interval_in_sec
+
     secs_since_save = secs_since_last_save()
-    if secs_since_save < start_nagging_in_sec() or not bpy.data.is_dirty:
+    if secs_since_save <= start_nagging_in_sec() or not bpy.data.is_dirty:
         clear_warning()
         return check_interval_in_sec
 
@@ -232,6 +236,13 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         size=3,
     )
 
+    include_unsaved: bpy.props.BoolProperty(  # type: ignore
+        name="Also nag when never saved",
+        description="Also nag when the file has never been saved. When disabled, the "
+        "add-on will only start nagging after a file has been saved/loaded from disk.",
+        default=True,
+    )
+
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
 
@@ -241,6 +252,7 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         col.use_property_decorate = False
         col.prop(self, "nag_start_time")
         col.prop(self, "full_problem_time")
+        col.prop(self, "include_unsaved")
         col.prop(self, "color")
 
 
@@ -250,12 +262,14 @@ _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 def register() -> None:
     _register()
+    _reset_timer()
 
     bpy.app.handlers.save_post.append(on_save_post)
     bpy.app.handlers.load_post.append(on_load_post)
     bpy.app.handlers.load_factory_startup_post.append(on_load_post)
 
     bpy.app.timers.register(check_last_save_timestamp, first_interval=0, persistent=True)
+    check_last_save_timestamp()
 
 
 def unregister() -> None:
