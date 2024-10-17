@@ -27,7 +27,7 @@ bl_info = {
     'name': 'You Are Autosave',
     'author': 'Sybren A. Stüvel',
     'description': "Show a warning when you haven't saved in a while",
-    'version': (1, 2, 0),
+    'version': (1, 3, 0),
     'blender': (3, 6, 0),
     'location': 'Somewhere',
     'category': 'System',
