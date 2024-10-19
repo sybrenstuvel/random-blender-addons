@@ -16,6 +16,7 @@
 #
 # ======================= END GPL LICENSE BLOCK ========================
 
+import platform
 import time
 
 import bpy
@@ -36,8 +37,9 @@ bl_info = {
 
 
 last_save_timestamp: float = float("-inf")
-check_interval_in_sec = 1
+check_interval_in_sec = 0.5
 line_thickness = 4.0
+suppress_the_redness = False
 
 draw_handle: object = None
 
@@ -68,6 +70,7 @@ def check_last_save_timestamp() -> float:
         clear_warning()
         return check_interval_in_sec
 
+    bpy.ops.autosave.check_modifier_keys('INVOKE_DEFAULT')
     show_warning()
 
     # bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
@@ -148,6 +151,17 @@ def draw_callback_px():
     secs_before_nag = start_nagging_in_sec()
     time_in_warning = secs_since_save - secs_before_nag
     line_len_factor = time_in_warning / (full_problem_after_sec() - secs_before_nag)
+
+    # Suppress some of the redness to allow peeking through. This was requested
+    # by 1P2D on the Blender Extensions website:
+    #
+    # "Would be good to add a feature that allows me to temporarily see through
+    # the red screen, before saving. It happened to me to have that red screen
+    # after not using Blender for a few minutes, and to forget where I was at
+    # with my model - CTRL+S completely blindly can be dangerous sometimes"
+
+    if line_len_factor > 1.1 and suppress_the_redness:
+        line_len_factor = 1.1
 
     if 1.0 < line_len_factor < float("inf"):
         # Panic mode.
@@ -257,8 +271,29 @@ class YouAreAutosavePreferences(bpy.types.AddonPreferences):
         col.prop(self, "include_unsaved")
         col.prop(self, "color")
 
+        if platform.system() == "Darwin":
+            keys = "Ctrl+Option+Shift"
+        else:
+            keys = "Ctrl+Alt+Shift"
+        layout.label(text=f"Hold {keys} to suppress the red and see the state of the file, before you save")
 
-classes = (YouAreAutosavePreferences,)
+
+class AUTOSAVE_OT_check_modifier_keys(bpy.types.Operator):
+    bl_idname = "autosave.check_modifier_keys"
+    bl_label = "You Are Autosave: check modifier keys"
+    bl_description = "This operator is invoked by other code, just to report on modifier key states."
+    bl_options = set()  # No 'REGISTER', no 'UNDO'.
+
+    def invoke(self, context, event):
+        global suppress_the_redness
+        suppress_the_redness = event.shift and event.ctrl and event.alt
+        return {'FINISHED'}
+
+
+classes = (
+    YouAreAutosavePreferences,
+    AUTOSAVE_OT_check_modifier_keys,
+)
 _register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
