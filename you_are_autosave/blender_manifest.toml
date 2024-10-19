@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "you_are_autosave"
-version = "1.3.0"
+version = "1.4.0"
 name = "You Are Autosave"
 tagline = "Show a warning when you haven't saved in a while"
 maintainer = "Sybren Stüvel <sybren@blender.org>"
