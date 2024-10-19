@@ -7,8 +7,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
+
+var Default = ValidateAndBuild
+
+func ValidateAndBuild() {
+	mg.SerialDeps(Validate, Build)
+}
 
 func Validate() error {
 	return sh.RunV("blender", "--command", "extension", "validate")
